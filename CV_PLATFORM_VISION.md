@@ -731,23 +731,3 @@ GitHub was revolutionary for open source collaboration.
 GitLab was revolutionary for DevOps.
 
 **CV Platform can be revolutionary for AI-native development.**
-
----
-
-## Decision Time
-
-**Two paths forward:**
-
-### Path A: CV-Git as GitHub Client (Original Plan)
-- Faster to market
-- Lower risk
-- Smaller market
-- Dependent on GitHub
-
-### Path B: CV Platform as GitHub Competitor (This Vision)
-- Bigger opportunity
-- Higher risk
-- Massive market potential
-- Independence
-
-**Which path do you want to take?** 🚀
