@@ -41,7 +41,8 @@ CV-Git is an intelligent wrapper around Git that adds a knowledge graph, semanti
 
 ### Prerequisites
 
-- **Node.js 18+** and npm/pnpm
+- **Node.js 18+**
+- **pnpm** (required for workspace dependencies)
 - **Docker** (for FalkorDB and Qdrant)
 - **API Keys:**
   - [Anthropic API key](https://console.anthropic.com/) (for AI features)
@@ -50,25 +51,24 @@ CV-Git is an intelligent wrapper around Git that adds a knowledge graph, semanti
 ### Installation
 
 ```bash
+# Install pnpm if you haven't already
+npm install -g pnpm
+
 # Clone the repository
-git clone https://github.com/yourusername/cv-git.git
+git clone https://github.com/controlVector/cv-git.git
 cd cv-git
 
-# Install dependencies
-npm install
-# or
+# Install dependencies (pnpm required for monorepo)
 pnpm install
 
 # Build the project
-npm run build
-# or
 pnpm build
 
-# Link CLI globally (optional)
-npm link
-# or
+# Link CLI globally
 pnpm link --global
 ```
+
+> **Note:** This project uses pnpm workspaces. npm and yarn are not currently supported.
 
 ### Start Required Services
 
