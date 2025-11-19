@@ -294,3 +294,218 @@ ${callers.length > 10 ? `  ... and ${callers.length - 10} more` : ''}`;
     return errorResult('Symbol inspection failed', error);
   }
 }
+
+/**
+ * Handle cv_graph_path tool call
+ * Find execution paths between two functions
+ */
+export async function handleGraphPath(args: { from: string; to: string; maxDepth?: number }): Promise<ToolResult> {
+  try {
+    const { from, to, maxDepth = 10 } = args;
+
+    // Find repository root
+    const repoRoot = await findRepoRoot();
+    if (!repoRoot) {
+      return errorResult('Not in a CV-Git repository. Run `cv init` first.');
+    }
+
+    // Load configuration
+    const config = await configManager.load(repoRoot);
+
+    // Initialize graph manager
+    const graph = createGraphManager(config.graph.url, config.graph.database);
+    await graph.connect();
+
+    // Find call paths
+    const paths = await graph.findCallPaths(from, to, maxDepth);
+
+    await graph.close();
+
+    if (paths.length === 0) {
+      return successResult(`No paths found from "${from}" to "${to}" (max depth: ${maxDepth})`);
+    }
+
+    const text = `Found ${paths.length} execution path${paths.length > 1 ? 's' : ''} from "${from}" to "${to}":
+
+${paths.map((path, i) => `Path ${i + 1} (${path.length} steps):\n  ${path.join(' → ')}`).join('\n\n')}`;
+
+    return successResult(text);
+  } catch (error: any) {
+    return errorResult('Path finding failed', error);
+  }
+}
+
+/**
+ * Handle cv_graph_dead_code tool call
+ * Find unreachable or unused functions
+ */
+export async function handleGraphDeadCode(): Promise<ToolResult> {
+  try {
+    // Find repository root
+    const repoRoot = await findRepoRoot();
+    if (!repoRoot) {
+      return errorResult('Not in a CV-Git repository. Run `cv init` first.');
+    }
+
+    // Load configuration
+    const config = await configManager.load(repoRoot);
+
+    // Initialize graph manager
+    const graph = createGraphManager(config.graph.url, config.graph.database);
+    await graph.connect();
+
+    // Find dead code
+    const deadCode = await graph.findDeadCode();
+
+    await graph.close();
+
+    if (deadCode.length === 0) {
+      return successResult('No dead code detected! All functions appear to be reachable.');
+    }
+
+    const text = `Found ${deadCode.length} potentially unreachable function${deadCode.length > 1 ? 's' : ''}:
+
+${deadCode.slice(0, 20).map((fn: any) =>
+  `  - ${fn.name} (${fn.kind}) in ${fn.file}:${fn.startLine}`
+).join('\n')}${deadCode.length > 20 ? `\n\n  ... and ${deadCode.length - 20} more` : ''}
+
+Note: Functions may be called dynamically or from external code.`;
+
+    return successResult(text);
+  } catch (error: any) {
+    return errorResult('Dead code detection failed', error);
+  }
+}
+
+/**
+ * Handle cv_graph_complexity tool call
+ * Find high-complexity functions
+ */
+export async function handleGraphComplexity(args: { threshold?: number; limit?: number }): Promise<ToolResult> {
+  try {
+    const { threshold = 10, limit = 20 } = args;
+
+    // Find repository root
+    const repoRoot = await findRepoRoot();
+    if (!repoRoot) {
+      return errorResult('Not in a CV-Git repository. Run `cv init` first.');
+    }
+
+    // Load configuration
+    const config = await configManager.load(repoRoot);
+
+    // Initialize graph manager
+    const graph = createGraphManager(config.graph.url, config.graph.database);
+    await graph.connect();
+
+    // Find complex functions
+    const complexFunctions = await graph.findComplexFunctions(threshold);
+
+    await graph.close();
+
+    if (complexFunctions.length === 0) {
+      return successResult(`No functions found with complexity >= ${threshold}`);
+    }
+
+    const displayCount = Math.min(complexFunctions.length, limit);
+    const text = `Found ${complexFunctions.length} function${complexFunctions.length > 1 ? 's' : ''} with complexity >= ${threshold}:
+
+${complexFunctions.slice(0, displayCount).map((fn: any) =>
+  `  - ${fn.name} (complexity: ${fn.complexity}) in ${fn.file}:${fn.startLine}`
+).join('\n')}${complexFunctions.length > displayCount ? `\n\n  ... and ${complexFunctions.length - displayCount} more` : ''}
+
+Tip: Functions with high complexity may benefit from refactoring.`;
+
+    return successResult(text);
+  } catch (error: any) {
+    return errorResult('Complexity analysis failed', error);
+  }
+}
+
+/**
+ * Handle cv_graph_cycles tool call
+ * Find circular dependencies in the call graph
+ */
+export async function handleGraphCycles(args: { maxDepth?: number }): Promise<ToolResult> {
+  try {
+    const { maxDepth = 5 } = args;
+
+    // Find repository root
+    const repoRoot = await findRepoRoot();
+    if (!repoRoot) {
+      return errorResult('Not in a CV-Git repository. Run `cv init` first.');
+    }
+
+    // Load configuration
+    const config = await configManager.load(repoRoot);
+
+    // Initialize graph manager
+    const graph = createGraphManager(config.graph.url, config.graph.database);
+    await graph.connect();
+
+    // Find circular dependencies
+    const cycles = await graph.findCircularDependencies(maxDepth);
+
+    await graph.close();
+
+    if (cycles.length === 0) {
+      return successResult(`No circular dependencies detected (max depth: ${maxDepth})`);
+    }
+
+    const text = `Found ${cycles.length} circular ${cycles.length > 1 ? 'dependencies' : 'dependency'}:
+
+${cycles.slice(0, 10).map((cycle, i) =>
+  `Cycle ${i + 1} (${cycle.length} functions):\n  ${cycle.join(' → ')}`
+).join('\n\n')}${cycles.length > 10 ? `\n\n  ... and ${cycles.length - 10} more cycles` : ''}
+
+Warning: Circular dependencies can make code harder to understand and maintain.`;
+
+    return successResult(text);
+  } catch (error: any) {
+    return errorResult('Cycle detection failed', error);
+  }
+}
+
+/**
+ * Handle cv_graph_hotspots tool call
+ * Find most-called functions (hot spots)
+ */
+export async function handleGraphHotspots(args: { limit?: number }): Promise<ToolResult> {
+  try {
+    const { limit = 20 } = args;
+
+    // Find repository root
+    const repoRoot = await findRepoRoot();
+    if (!repoRoot) {
+      return errorResult('Not in a CV-Git repository. Run `cv init` first.');
+    }
+
+    // Load configuration
+    const config = await configManager.load(repoRoot);
+
+    // Initialize graph manager
+    const graph = createGraphManager(config.graph.url, config.graph.database);
+    await graph.connect();
+
+    // Find hot spots
+    const hotspots = await graph.findHotSpots(limit);
+
+    await graph.close();
+
+    if (hotspots.length === 0) {
+      return successResult('No hot spots found. Graph may be empty or lacks call relationships.');
+    }
+
+    const text = `Top ${hotspots.length} most-called functions:
+
+${hotspots.map((hs: any, i: number) =>
+  `${i + 1}. ${hs.function.name} (called ${hs.callerCount} times) in ${hs.function.file}:${hs.function.startLine}`
+).join('\n')}
+
+Hot spots are frequently called functions that may benefit from optimization.`;
+
+    return successResult(text);
+  } catch (error: any) {
+    return errorResult('Hot spot analysis failed', error);
+  }
+}

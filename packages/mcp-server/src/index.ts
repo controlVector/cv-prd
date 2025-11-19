@@ -37,7 +37,16 @@ import {
 // Tool handlers
 import { handleFind } from './tools/search.js';
 import { handleExplain } from './tools/explain.js';
-import { handleGraphQuery, handleGraphStats, handleGraphInspect } from './tools/graph.js';
+import {
+  handleGraphQuery,
+  handleGraphStats,
+  handleGraphInspect,
+  handleGraphPath,
+  handleGraphDeadCode,
+  handleGraphComplexity,
+  handleGraphCycles,
+  handleGraphHotspots
+} from './tools/graph.js';
 import { handleDo, handleReview } from './tools/modify.js';
 import { handleSync } from './tools/sync.js';
 import { handlePRCreate, handlePRList, handlePRReview, handleReleaseCreate } from './tools/platform.js';
@@ -146,6 +155,84 @@ const tools: Tool[] = [
         },
       },
       required: ['target'],
+    },
+  },
+  {
+    name: 'cv_graph_path',
+    description: 'Find execution paths between two functions in the call graph. Useful for understanding how functions interact.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: {
+          type: 'string',
+          description: 'Starting function name',
+        },
+        to: {
+          type: 'string',
+          description: 'Target function name',
+        },
+        maxDepth: {
+          type: 'number',
+          description: 'Maximum path depth to search',
+          default: 10,
+        },
+      },
+      required: ['from', 'to'],
+    },
+  },
+  {
+    name: 'cv_graph_dead_code',
+    description: 'Find potentially unreachable or unused functions. Identifies code that may be safe to remove.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'cv_graph_complexity',
+    description: 'Find high-complexity functions based on cyclomatic complexity. Helps identify functions that may need refactoring.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        threshold: {
+          type: 'number',
+          description: 'Minimum complexity threshold',
+          default: 10,
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results to return',
+          default: 20,
+        },
+      },
+    },
+  },
+  {
+    name: 'cv_graph_cycles',
+    description: 'Find circular dependencies in the call graph. Detects potential architectural issues.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        maxDepth: {
+          type: 'number',
+          description: 'Maximum cycle depth to search',
+          default: 5,
+        },
+      },
+    },
+  },
+  {
+    name: 'cv_graph_hotspots',
+    description: 'Find most-called functions (hot spots) in the codebase. Identifies functions that may benefit from optimization.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Number of hot spots to return',
+          default: 20,
+        },
+      },
     },
   },
 
@@ -401,6 +488,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'cv_graph_inspect':
         validateArgs(args, ['target']);
         result = await handleGraphInspect(args as { target: string });
+        break;
+
+      case 'cv_graph_path':
+        validateArgs(args, ['from', 'to']);
+        result = await handleGraphPath(args as { from: string; to: string; maxDepth?: number });
+        break;
+
+      case 'cv_graph_dead_code':
+        result = await handleGraphDeadCode();
+        break;
+
+      case 'cv_graph_complexity':
+        result = await handleGraphComplexity(args as { threshold?: number; limit?: number });
+        break;
+
+      case 'cv_graph_cycles':
+        result = await handleGraphCycles(args as { maxDepth?: number });
+        break;
+
+      case 'cv_graph_hotspots':
+        result = await handleGraphHotspots(args as { limit?: number });
         break;
 
       // Code Modification
