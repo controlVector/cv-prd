@@ -8,7 +8,7 @@ Model Context Protocol (MCP) server for CV-Git, enabling AI assistants like Clau
 
 ## Available Tools
 
-### Code Understanding
+### Code Understanding (5 tools)
 
 **cv_find** - Semantic code search
 - Search your codebase using natural language queries
@@ -35,7 +35,7 @@ Model Context Protocol (MCP) server for CV-Git, enabling AI assistants like Clau
 - See all relationships and dependencies
 - View callers and callees
 
-### Code Modification
+### Code Modification (3 tools)
 
 **cv_do** - AI-powered task execution
 - Generate execution plans for coding tasks
@@ -51,6 +51,46 @@ Model Context Protocol (MCP) server for CV-Git, enabling AI assistants like Clau
 - Update the knowledge graph with latest code changes
 - Supports incremental and full sync modes
 - Maintains vector embeddings
+
+### Platform Integration (4 tools)
+
+**cv_pr_create** - Create pull requests
+- Create PRs on GitHub with title and description
+- Supports draft PRs
+- Requires GitHub CLI (gh)
+
+**cv_pr_list** - List pull requests
+- List open, closed, or all PRs
+- Filter and limit results
+- Requires GitHub CLI (gh)
+
+**cv_pr_review** - Review pull request
+- Get PR details and diff summary
+- View author, state, and changes
+- Requires GitHub CLI (gh)
+
+**cv_release_create** - Create releases
+- Create GitHub releases with version tags
+- Auto-generate or provide custom release notes
+- Support for draft and pre-releases
+- Requires GitHub CLI (gh)
+
+### System Operations (3 tools)
+
+**cv_config_get** - Get configuration values
+- Retrieve CV-Git configuration
+- Supports nested keys with dot notation (e.g., "ai.model")
+- Returns JSON for complex values
+
+**cv_status** - Repository status
+- View git status and CV-Git initialization
+- Check service health (FalkorDB, Qdrant)
+- See repository information
+
+**cv_doctor** - Run diagnostics
+- Check all CV-Git dependencies
+- Verify git, Node.js, services
+- Get troubleshooting suggestions
 
 ## Installation
 

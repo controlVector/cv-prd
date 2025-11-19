@@ -40,6 +40,8 @@ import { handleExplain } from './tools/explain.js';
 import { handleGraphQuery, handleGraphStats, handleGraphInspect } from './tools/graph.js';
 import { handleDo, handleReview } from './tools/modify.js';
 import { handleSync } from './tools/sync.js';
+import { handlePRCreate, handlePRList, handlePRReview, handleReleaseCreate } from './tools/platform.js';
+import { handleConfigGet, handleStatus, handleDoctor } from './tools/system.js';
 
 /**
  * Tool definitions
@@ -215,6 +217,133 @@ const tools: Tool[] = [
       },
     },
   },
+
+  // Platform Integration Tools
+  {
+    name: 'cv_pr_create',
+    description: 'Create a pull request on GitHub. Requires GitHub CLI (gh) to be installed and authenticated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Pull request title',
+        },
+        body: {
+          type: 'string',
+          description: 'Pull request description',
+        },
+        base: {
+          type: 'string',
+          description: 'Base branch for the PR',
+          default: 'main',
+        },
+        draft: {
+          type: 'boolean',
+          description: 'Create as a draft PR',
+          default: false,
+        },
+      },
+    },
+  },
+  {
+    name: 'cv_pr_list',
+    description: 'List pull requests from the repository. Requires GitHub CLI (gh) to be installed and authenticated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        state: {
+          type: 'string',
+          enum: ['open', 'closed', 'all'],
+          description: 'Filter by PR state',
+          default: 'open',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of PRs to list',
+          default: 10,
+        },
+      },
+    },
+  },
+  {
+    name: 'cv_pr_review',
+    description: 'Get details and review information for a pull request. Requires GitHub CLI (gh) to be installed and authenticated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        number: {
+          type: 'number',
+          description: 'Pull request number',
+        },
+      },
+      required: ['number'],
+    },
+  },
+  {
+    name: 'cv_release_create',
+    description: 'Create a new release on GitHub. Requires GitHub CLI (gh) to be installed and authenticated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        version: {
+          type: 'string',
+          description: 'Version tag (e.g., v1.0.0)',
+        },
+        title: {
+          type: 'string',
+          description: 'Release title',
+        },
+        notes: {
+          type: 'string',
+          description: 'Release notes (auto-generated if not provided)',
+        },
+        draft: {
+          type: 'boolean',
+          description: 'Create as a draft release',
+          default: false,
+        },
+        prerelease: {
+          type: 'boolean',
+          description: 'Mark as a pre-release',
+          default: false,
+        },
+      },
+      required: ['version'],
+    },
+  },
+
+  // System Tools
+  {
+    name: 'cv_config_get',
+    description: 'Get a configuration value from CV-Git config. Supports nested keys with dot notation (e.g., "ai.model").',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'Configuration key to retrieve (use dot notation for nested keys)',
+        },
+      },
+      required: ['key'],
+    },
+  },
+  {
+    name: 'cv_status',
+    description: 'Get comprehensive status of CV-Git repository including git status, CV-Git initialization, and service health.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'cv_doctor',
+    description: 'Run comprehensive diagnostics to check CV-Git setup, dependencies, services, and configuration.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 /**
@@ -286,6 +415,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'cv_sync':
         result = await handleSync(args as unknown as SyncArgs);
+        break;
+
+      // Platform Integration
+      case 'cv_pr_create':
+        result = await handlePRCreate(args as any);
+        break;
+
+      case 'cv_pr_list':
+        result = await handlePRList(args as any);
+        break;
+
+      case 'cv_pr_review':
+        validateArgs(args, ['number']);
+        result = await handlePRReview(args as any);
+        break;
+
+      case 'cv_release_create':
+        validateArgs(args, ['version']);
+        result = await handleReleaseCreate(args as any);
+        break;
+
+      // System Operations
+      case 'cv_config_get':
+        validateArgs(args, ['key']);
+        result = await handleConfigGet(args as any);
+        break;
+
+      case 'cv_status':
+        result = await handleStatus();
+        break;
+
+      case 'cv_doctor':
+        result = await handleDoctor();
         break;
 
       default:
