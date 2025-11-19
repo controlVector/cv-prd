@@ -1,0 +1,98 @@
+{
+  "status": "success",
+  "prd_id": "99a55ed9-f842-4616-9870-4e05b6a7b53a",
+  "prd_name": "E-Commerce Platform",
+  "optimization_goal": "vibe coding",
+  "analysis": {
+    "overall_assessment": "The PRD provides basic e-commerce functionality but lacks technical specifics, security requirements, and clear data models. Several critical aspects like payment processing, order management, and error handling are missing.",
+    "structural_insights": "Recommend reorganizing facts into logical modules: User Management, Product Catalog, Shopping Cart, Orders, and Payments. Each module should have clear interfaces and API contracts. Add technical requirements for each module including error handling, logging, and monitoring. Include data model specifications and API documentation requirements."
+  },
+  "statistics": {
+    "facts_updated": 3,
+    "facts_created": 3,
+    "relationships_created": 2,
+    "facts_unchanged": 0
+  },
+  "detailed_analysis": {
+    "overall_assessment": "The PRD provides basic e-commerce functionality but lacks technical specifics, security requirements, and clear data models. Several critical aspects like payment processing, order management, and error handling are missing.",
+    "fact_optimizations": [
+      {
+        "original_fact_index": 0,
+        "quality_score": 6,
+        "issues": [
+          "Authentication requirements lack security specifics",
+          "Profile data model is incomplete",
+          "Password requirements not specified",
+          "Session management details missing"
+        ],
+        "optimized_text": "User Management Requirements:\n- Implement secure user registration with email verification\n- Authentication using JWT tokens with configurable expiration\n- User profiles must contain: email (unique), name, password (hashed), creation date, last login\n- Profile updates must be validated and logged\n- Password reset functionality required\n- Session timeout after 30 minutes of inactivity",
+        "suggested_priority": "CRITICAL",
+        "suggested_type": "SECURITY_REQUIREMENT",
+        "additional_context": "Must comply with GDPR and standard security practices. Include rate limiting for login attempts."
+      },
+      {
+        "original_fact_index": 1,
+        "quality_score": 5,
+        "issues": [
+          "Product data model incomplete",
+          "Search implementation details missing",
+          "Pagination not specified",
+          "Category structure undefined"
+        ],
+        "optimized_text": "Product Catalog Requirements:\n- Product model: {id, name, description, price, images[], category, stock_count, created_at, updated_at}\n- Implement elasticsearch for product search with fuzzy matching\n- Grid display with configurable items per page (default 12)\n- Category hierarchy support with unlimited nesting\n- Real-time stock updates\n- Product image optimization and CDN delivery",
+        "suggested_priority": "HIGH",
+        "suggested_type": "FEATURE_REQUIREMENT",
+        "additional_context": "Consider caching strategy for product listings and search results"
+      },
+      {
+        "original_fact_index": 2,
+        "quality_score": 7,
+        "issues": [
+          "Cart persistence mechanism unspecified",
+          "Cart item constraints missing",
+          "Stock validation not mentioned",
+          "Cart expiration policy missing"
+        ],
+        "optimized_text": "Shopping Cart Requirements:\n- Cart model: {user_id, items[], total, created_at, updated_at}\n- Cart item: {product_id, quantity, price_at_addition}\n- Real-time stock validation on add/update\n- Redis-based cart persistence with 7-day expiration\n- Maximum 50 items per cart\n- Quantity limits based on available stock\n- Automatic price sync with product updates",
+        "suggested_priority": "CRITICAL",
+        "suggested_type": "FEATURE_REQUIREMENT",
+        "additional_context": "Include cart migration when user logs in"
+      }
+    ],
+    "new_facts": [
+      {
+        "text": "Payment Processing Requirements:\n- Support credit cards and PayPal\n- PCI compliance required\n- Implement payment gateway integration\n- Handle payment failures gracefully\n- Support refunds and partial refunds",
+        "type": "SECURITY_REQUIREMENT",
+        "priority": "CRITICAL",
+        "rationale": "Essential for e-commerce transactions"
+      },
+      {
+        "text": "Order Management Requirements:\n- Order status tracking\n- Email notifications for order updates\n- Order history in user profile\n- Invoice generation\n- Support order cancellation",
+        "type": "FEATURE_REQUIREMENT",
+        "priority": "HIGH",
+        "rationale": "Critical for post-purchase experience"
+      },
+      {
+        "text": "Performance Requirements:\n- Page load under 2 seconds\n- 99.9% uptime\n- Support 1000 concurrent users\n- API rate limiting\n- Response time monitoring",
+        "type": "TECHNICAL_REQUIREMENT",
+        "priority": "HIGH",
+        "rationale": "Ensures system scalability and reliability"
+      }
+    ],
+    "relationship_recommendations": [
+      {
+        "from_fact_index": 2,
+        "to_fact_index": 0,
+        "relationship_type": "DEPENDS_ON",
+        "rationale": "Cart requires user authentication for persistence"
+      },
+      {
+        "from_fact_index": 2,
+        "to_fact_index": 1,
+        "relationship_type": "REFERENCES",
+        "rationale": "Cart items reference product data and stock levels"
+      }
+    ],
+    "structural_insights": "Recommend reorganizing facts into logical modules: User Management, Product Catalog, Shopping Cart, Orders, and Payments. Each module should have clear interfaces and API contracts. Add technical requirements for each module including error handling, logging, and monitoring. Include data model specifications and API documentation requirements."
+  }
+}

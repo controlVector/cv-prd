@@ -1,0 +1,23 @@
+# Electron build outputs
+dist/
+backend-dist/
+frontend-dist/
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Resources (binaries)
+resources/databases/qdrant/qdrant
+resources/databases/qdrant/qdrant.exe

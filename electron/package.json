@@ -1,0 +1,71 @@
+{
+  "name": "cvprd-desktop",
+  "version": "1.0.0",
+  "description": "cvPRD - Desktop Application for AI-Powered Product Requirements",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "npm run build:frontend && npm run build:backend && electron-builder",
+    "build:frontend": "cd ../frontend && npm run build",
+    "build:backend": "cd ../backend && python build_backend.py",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "author": "cvPRD Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "find-process": "^1.4.7"
+  },
+  "build": {
+    "appId": "com.cvprd.desktop",
+    "productName": "cvPRD",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/databases",
+        "to": "databases"
+      },
+      {
+        "from": "backend-dist",
+        "to": "backend-dist"
+      },
+      {
+        "from": "frontend-dist",
+        "to": "frontend-dist"
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "resources/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "resources/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

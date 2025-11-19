@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Docker volumes (data persists in named volumes)
+infrastructure/docker/data/
+
+# Node (for future frontend)
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Model cache
+.cache/
+models/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
