@@ -12,7 +12,8 @@ export type SymbolKind =
   | 'type'
   | 'variable'
   | 'constant'
-  | 'enum';
+  | 'enum'
+  | 'struct';
 
 export type Visibility = 'public' | 'private' | 'protected';
 

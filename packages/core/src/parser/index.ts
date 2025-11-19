@@ -7,6 +7,10 @@
 import { ParsedFile } from '@cv-git/shared';
 import { ILanguageParser } from './base.js';
 import { createTypeScriptParser } from './typescript.js';
+import { createPythonParser } from './python.js';
+import { createGoParser } from './go.js';
+import { createRustParser } from './rust.js';
+import { createJavaParser } from './java.js';
 import * as path from 'path';
 
 /**
@@ -28,11 +32,21 @@ export class CodeParser {
     const tsParser = createTypeScriptParser();
     this.registerParser('typescript', tsParser);
 
-    // TODO: Add more parsers here
-    // Python: this.registerParser('python', createPythonParser());
-    // Go: this.registerParser('go', createGoParser());
-    // Rust: this.registerParser('rust', createRustParser());
-    // Java: this.registerParser('java', createJavaParser());
+    // Python parser
+    const pythonParser = createPythonParser();
+    this.registerParser('python', pythonParser);
+
+    // Go parser
+    const goParser = createGoParser();
+    this.registerParser('go', goParser);
+
+    // Rust parser
+    const rustParser = createRustParser();
+    this.registerParser('rust', rustParser);
+
+    // Java parser
+    const javaParser = createJavaParser();
+    this.registerParser('java', javaParser);
   }
 
   /**
@@ -124,3 +138,7 @@ export function createParser(): CodeParser {
 // Re-export base classes for extending
 export { ILanguageParser, BaseLanguageParser, TreeSitterNode } from './base.js';
 export { TypeScriptParser, createTypeScriptParser } from './typescript.js';
+export { PythonParser, createPythonParser } from './python.js';
+export { GoParser, createGoParser } from './go.js';
+export { RustParser, createRustParser } from './rust.js';
+export { JavaParser, createJavaParser } from './java.js';
