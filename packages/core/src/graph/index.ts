@@ -217,29 +217,46 @@ export class GraphManager {
 
   /**
    * Parse FalkorDB query result
+   * Format: [headers, rows, statistics]
+   * - headers: [[type, name], [type, name], ...]
+   * - rows: [[[type, value], [type, value], ...], ...]
+   * - statistics: [string, string, ...]
    */
   private parseQueryResult(result: any): GraphQueryResult[] {
-    // FalkorDB returns results in a specific format
-    // This is a simplified parser - may need adjustment based on actual FalkorDB response format
     if (!result || !Array.isArray(result)) {
       return [];
     }
 
-    // Result format: [header, data, statistics]
+    // Need at least headers and rows
     if (result.length < 2) {
       return [];
     }
 
-    const header = result[0] as string[];
-    const rows = result[1] as any[][];
+    const headerPairs = result[0];
+    const rowArrays = result[1];
 
-    return rows.map(row => {
+    if (!Array.isArray(headerPairs) || !Array.isArray(rowArrays)) {
+      return [];
+    }
+
+    // Extract column names from header pairs: [[type, name], [type, name], ...]
+    const headers: string[] = headerPairs.map((pair: any[]) => pair[1]);
+
+    // Parse each row
+    const parsed: GraphQueryResult[] = rowArrays.map((row: any[]) => {
       const obj: GraphQueryResult = {};
-      header.forEach((col, i) => {
-        obj[col] = row[i];
+
+      // Each row is an array of [type, value] pairs
+      row.forEach((pair: any[], idx: number) => {
+        if (idx < headers.length) {
+          obj[headers[idx]] = pair[1]; // pair[0] is type, pair[1] is value
+        }
       });
+
       return obj;
     });
+
+    return parsed;
   }
 
   /**
