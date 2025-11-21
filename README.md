@@ -84,11 +84,24 @@ pnpm install
 # Build the project
 pnpm build
 
-# Link CLI globally
-pnpm link --global
+# Link CLI globally (must specify CLI package)
+pnpm link --global --dir packages/cli
 ```
 
 > **Note:** This project uses pnpm workspaces. npm and yarn are not currently supported.
+
+### Verify Installation
+
+```bash
+# Verify cv command is available
+cv --version
+
+# If 'cv' command not found, add pnpm global bin to PATH:
+export PATH="$(pnpm bin -g):$PATH"
+
+# Add to your shell profile (~/.bashrc, ~/.zshrc, etc.) to make permanent
+echo 'export PATH="$(pnpm bin -g):$PATH"' >> ~/.bashrc
+```
 
 ### Start Required Services
 
