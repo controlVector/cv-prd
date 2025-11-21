@@ -4,13 +4,14 @@
   "description": "CV-Git command-line interface",
   "type": "module",
   "bin": {
-    "cv": "./dist/index.js"
+    "cv": "./dist/bundle.cjs"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && pnpm run bundle",
+    "bundle": "node -e \"const fs=require('fs');const c=fs.readFileSync('dist/index.js','utf8');fs.writeFileSync('dist/index.js',c.replace(/^#!.*\\n/,''))\" && esbuild dist/index.js --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs --external:keytar --external:tree-sitter --external:tree-sitter-* --banner:js='#!/usr/bin/env node'",
     "dev": "tsc --watch",
     "clean": "rm -rf dist *.tsbuildinfo",
-    "start": "node dist/index.js",
+    "start": "node dist/bundle.js",
     "test": "vitest"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.19.25",
+    "esbuild": "^0.27.0",
     "typescript": "^5.3.3"
   }
 }
