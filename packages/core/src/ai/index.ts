@@ -18,6 +18,7 @@ import {
 import { VectorManager } from '../vector/index.js';
 import { GraphManager } from '../graph/index.js';
 import { GitManager } from '../git/index.js';
+import { PRDClient, AIContext as PRDContext } from '@cv-git/prd-client';
 
 export interface AIManagerOptions {
   provider: 'anthropic';
@@ -25,6 +26,8 @@ export interface AIManagerOptions {
   apiKey: string;
   maxTokens?: number;
   temperature?: number;
+  prdUrl?: string;
+  prdApiKey?: string;
 }
 
 export interface StreamHandler {
@@ -38,6 +41,7 @@ export class AIManager {
   private model: string;
   private maxTokens: number;
   private temperature: number;
+  private prdClient?: PRDClient;
 
   constructor(
     private options: AIManagerOptions,
@@ -49,6 +53,14 @@ export class AIManager {
     this.model = options.model || 'claude-3-5-sonnet-20241022';
     this.maxTokens = options.maxTokens || 4096;
     this.temperature = options.temperature || 0.7;
+
+    // Initialize PRD client if URL provided
+    if (options.prdUrl) {
+      this.prdClient = new PRDClient({
+        baseUrl: options.prdUrl,
+        apiKey: options.prdApiKey
+      });
+    }
   }
 
   /**
@@ -61,13 +73,18 @@ export class AIManager {
       maxSymbols?: number;
       includeGitStatus?: boolean;
       specificFiles?: string[];
+      prdRefs?: string[];
     }
   ): Promise<Context> {
     const context: Context = {
       chunks: [],
       symbols: [],
-      files: []
+      files: [],
+      prdContext: undefined
     };
+
+    // Extract PRD refs from query if not provided
+    const prdRefs = options?.prdRefs || PRDClient.extractPRDReferences(query);
 
     const maxChunks = options?.maxChunks || 10;
     const maxSymbols = options?.maxSymbols || 20;
@@ -153,6 +170,20 @@ export class AIManager {
         context.workingTreeStatus = await this.git.getStatus();
       } catch (error) {
         console.error('Git status failed:', error);
+      }
+    }
+
+    // 5. Get PRD context if refs found
+    if (this.prdClient && prdRefs.length > 0) {
+      try {
+        // Get context for the first PRD reference
+        const prdContext = await this.prdClient.getContext(prdRefs[0], {
+          depth: 3,
+          strategy: 'expanded'
+        });
+        context.prdContext = prdContext;
+      } catch (error) {
+        console.error('PRD context fetch failed:', error);
       }
     }
 
@@ -414,6 +445,13 @@ export class AIManager {
     let prompt = `You are an expert software engineer. Generate code for the following task:\n\n`;
     prompt += `Task: ${task}\n\n`;
 
+    // Include PRD context if available
+    if (context.prdContext) {
+      prompt += `## Requirements Context\n\n`;
+      prompt += PRDClient.formatContextForPrompt(context.prdContext);
+      prompt += `\n`;
+    }
+
     if (context.chunks.length > 0) {
       prompt += `## Existing Code Context\n\n`;
       for (const chunk of context.chunks.slice(0, 5)) {
@@ -426,8 +464,11 @@ export class AIManager {
     prompt += `1. File paths for each change\n`;
     prompt += `2. Complete, working code\n`;
     prompt += `3. Comments explaining key logic\n`;
-    prompt += `4. Follow existing code style and patterns\n\n`;
-    prompt += `Format your response clearly with file paths and code blocks.`;
+    prompt += `4. Follow existing code style and patterns\n`;
+    if (context.prdContext) {
+      prompt += `5. Ensure all requirements from the PRD are addressed\n`;
+    }
+    prompt += `\nFormat your response clearly with file paths and code blocks.`;
 
     return prompt;
   }

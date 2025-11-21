@@ -238,6 +238,7 @@ export interface Context {
   files: FileNode[];
   commits?: CommitNode[];
   workingTreeStatus?: WorkingTreeStatus;
+  prdContext?: any; // PRD context from cvPRD (AIContext type)
 }
 
 export interface Plan {
@@ -375,6 +376,11 @@ export interface CVConfig {
     enableChat: boolean;
     enableAutoCommit: boolean;
     enableTelemetry: boolean;
+  };
+  cvprd?: {
+    url: string;
+    apiKey?: string;
+    enabled?: boolean;
   };
 }
 

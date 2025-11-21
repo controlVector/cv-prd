@@ -25,7 +25,8 @@ export function doCommand(): Command {
     .description('Execute a task with AI assistance')
     .argument('<task>', 'Task description in natural language')
     .option('--plan-only', 'Only generate the plan, do not generate code')
-    .option('--yes', 'Skip approval prompts');
+    .option('--yes', 'Skip approval prompts')
+    .option('--prd <refs>', 'Include PRD context (e.g., PRD-123 or comma-separated list)');
 
   addGlobalOptions(cmd);
 
@@ -87,22 +88,32 @@ export function doCommand(): Command {
           {
             provider: 'anthropic',
             model: config.ai.model,
-            apiKey: anthropicApiKey
+            apiKey: anthropicApiKey,
+            prdUrl: config.cvprd?.url || process.env.CVPRD_URL,
+            prdApiKey: config.cvprd?.apiKey
           },
           vector,
           graph,
           git
         );
 
+        // Parse PRD refs from option
+        const prdRefs = options.prd
+          ? options.prd.split(',').map((r: string) => r.trim())
+          : undefined;
+
         // Step 1: Gather context
         spinner.text = 'Gathering context...';
-        const context = await ai.gatherContext(task, { includeGitStatus: true });
+        const context = await ai.gatherContext(task, {
+          includeGitStatus: true,
+          prdRefs
+        });
 
-        spinner.succeed(
-          chalk.green(
-            `Found ${context.chunks.length} code chunks and ${context.symbols.length} symbols`
-          )
-        );
+        let contextMsg = `Found ${context.chunks.length} code chunks and ${context.symbols.length} symbols`;
+        if (context.prdContext) {
+          contextMsg += ` + PRD context`;
+        }
+        spinner.succeed(chalk.green(contextMsg));
 
         // Step 2: Generate plan
         spinner = ora('Generating plan...').start();

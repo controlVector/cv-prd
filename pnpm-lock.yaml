@@ -90,6 +90,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.30.0
         version: 0.30.1
+      '@cv-git/prd-client':
+        specifier: workspace:*
+        version: link:../prd-client
       '@cv-git/shared':
         specifier: workspace:*
         version: link:../shared
