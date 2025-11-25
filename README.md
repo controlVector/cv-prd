@@ -4,6 +4,15 @@
 
 CV-Git is an intelligent wrapper around Git that adds a knowledge graph, semantic search, and AI-powered code understanding to your development workflow. Think of it as "Git with a brain" - it understands your codebase structure, relationships, and context to provide powerful AI-assisted development features.
 
+  1. Overview
+  2. System Dependencies ⭐ NEW - MOVE TO TOP
+  3. Prerequisites (with installation commands)
+  4. Quick Start Checklist ⭐ NEW
+  5. Installation Steps
+  6. Configuration
+  7. Usage
+  8. WSL-Specific Notes (keep but reference the System Dependencies section)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
