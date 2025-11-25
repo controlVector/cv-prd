@@ -57,6 +57,113 @@ CV-Git is an intelligent wrapper around Git that adds a knowledge graph, semanti
 
 ---
 
+  ## System Dependencies
+
+  ### Linux/WSL Users
+  Before installing, ensure you have the required system packages:
+
+  ```bash
+  # Ubuntu/Debian/WSL
+  sudo apt update
+  sudo apt install -y libsecret-1-dev build-essential python3
+  ```
+
+  # Fedora/RHEL
+  ```bash
+  sudo dnf install libsecret-devel gcc-c++ make python3
+  ```
+
+  # Arch Linux
+  ```bash
+  sudo pacman -S libsecret base-devel python
+  ```
+
+  Why these are needed:
+  - libsecret-1-dev: Required for keytar (secure credential storage)
+  - build-essential: Compilers needed for native bindings (tree-sitter, keytar)
+  - python3: Required by node-gyp for building native modules
+
+  macOS Users
+
+  # Xcode Command Line Tools (includes build tools)
+  ```bash
+  xcode-select --install
+  ```
+
+  Windows Users
+
+  Use WSL2 and follow the Linux/WSL instructions above.
+
+  ### 2. **Enhance Prerequisites Section**
+
+  Move from just listing requirements to providing installation commands:
+
+  ## Prerequisites
+
+  ### Node.js 18+ and pnpm
+
+  **WSL/Linux (recommended - using nvm):**
+  ```bash
+  # Install nvm
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+  source ~/.bashrc
+
+  # Install Node.js LTS
+  nvm install --lts
+
+  # Install pnpm globally
+  npm install -g pnpm
+  ```
+  Alternative (apt):
+  ```bash
+  sudo apt install -y nodejs npm
+  sudo npm install -g pnpm
+  ```
+
+  Verify installation:
+  ```bash
+  node --version  # Should be 18+
+  pnpm --version
+  ```
+  ### 3. **Update Installation Steps with Troubleshooting**
+
+  ## Installation
+
+  1. **Install system dependencies first** (see System Dependencies section above)
+
+  2. **Clone and build:**
+     ```bash
+     git clone https://github.com/controlVector/cv-git.git
+     cd cv-git
+
+     # This will build native bindings - may take a few minutes
+     pnpm install
+     pnpm build
+
+     # Link CLI globally
+     cd packages/cli && pnpm link --global
+     ```
+
+Common issue: If you see libsecret-1.so.0: cannot open shared object file:
+  ```bash
+  sudo apt install -y libsecret-1-dev
+  pnpm rebuild keytar
+  ```
+
+  ### 4. **Add a Quick Start Checklist**
+
+  ## Quick Start Checklist
+
+  Before running `pnpm install`, verify you have:
+  - [ ] Node.js 18+ installed (`node --version`)
+  - [ ] pnpm installed (`pnpm --version`)
+  - [ ] System build tools (`gcc --version` or `xcode-select -p`)
+  - [ ] libsecret library (Linux/WSL: `dpkg -l | grep libsecret-1-dev`)
+  - [ ] Docker running (`docker ps`)
+  - [ ] API keys ready (Anthropic & OpenAI)
+
+
+
 ## 🎯 Quick Start
 
 ### Prerequisites
