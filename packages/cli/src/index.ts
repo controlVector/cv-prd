@@ -25,6 +25,9 @@ import { cloneCommand } from './commands/clone.js';
 import { cloneGroupCommand } from './commands/clone-group.js';
 import { contextCommand } from './commands/context.js';
 import { chatCommand } from './commands/chat.js';
+import { pushCommand } from './commands/push.js';
+import { hooksCommand } from './commands/hooks.js';
+import { designCommand } from './commands/design.js';
 
 const program = new Command();
 
@@ -44,6 +47,9 @@ program.addCommand(cloneCommand());          // Clone and initialize
 program.addCommand(cloneGroupCommand());     // Clone entire group/subgroup
 program.addCommand(contextCommand());        // Generate AI context
 program.addCommand(chatCommand());           // AI chat with codebase context
+program.addCommand(pushCommand());           // Git push with auto-sync
+program.addCommand(hooksCommand());          // Manage git hooks
+program.addCommand(designCommand());         // Design-first scaffolding
 program.addCommand(initCommand());
 program.addCommand(syncCommand());
 program.addCommand(doCommand());
