@@ -122,8 +122,10 @@ export class GraphManager {
       await this.safeCreateIndex('Commit', 'timestamp');
 
     } catch (error: any) {
-      // Indexes might already exist, log but don't fail
-      console.warn('Index creation warning:', error.message);
+      // Only log unexpected errors (not "already indexed" which is handled by safeCreateIndex)
+      if (!error.message.includes('already indexed') && !error.message.includes('already exists')) {
+        console.warn('Index creation warning:', error.message);
+      }
     }
   }
 
@@ -149,8 +151,8 @@ export class GraphManager {
     try {
       await this.query(`CREATE INDEX FOR (n:${label}) ON (n.${property})`);
     } catch (error: any) {
-      // Index might already exist
-      if (!error.message.includes('already exists')) {
+      // Index might already exist - FalkorDB uses "already indexed"
+      if (!error.message.includes('already exists') && !error.message.includes('already indexed')) {
         throw error;
       }
     }

@@ -1,6 +1,6 @@
 /**
  * cv sync command
- * Synchronize the knowledge graph with the repository
+ * Synchronize the knowledge graph with the repository or workspace
  */
 
 import { Command } from 'commander';
@@ -15,310 +15,18 @@ import {
   createVectorManager,
   createSyncEngine
 } from '@cv-git/core';
-import { findRepoRoot } from '@cv-git/shared';
+import {
+  findRepoRoot,
+  loadWorkspace,
+  saveWorkspace,
+  isWorkspace,
+  CVWorkspace,
+  WorkspaceRepo,
+} from '@cv-git/shared';
 import { CredentialManager } from '@cv-git/credentials';
 import { addGlobalOptions, createOutput } from '../utils/output.js';
 import { checkCredentials, displayCompactStatus } from '../utils/config-check.js';
-
-/**
- * Check if Docker is available
- */
-function isDockerAvailable(): boolean {
-  try {
-    execSync('docker --version', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if a port is available
- */
-function isPortAvailable(port: number): boolean {
-  try {
-    // Try to connect - if connection refused, port is available
-    execSync(`nc -z 127.0.0.1 ${port}`, { stdio: 'ignore', timeout: 1000 });
-    return false; // Something is listening
-  } catch {
-    return true; // Port is available
-  }
-}
-
-/**
- * Find an available port starting from the given port
- */
-function findAvailablePort(startPort: number = 6379, maxAttempts: number = 100): number {
-  for (let i = 0; i < maxAttempts; i++) {
-    const port = startPort + i;
-    if (isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`Could not find available port starting from ${startPort}`);
-}
-
-/**
- * Check if cv-git's FalkorDB container is running and get its port
- */
-function getCVFalkorDBInfo(): { running: boolean; port?: number; stopped?: boolean } {
-  try {
-    // Check if our container exists and is running
-    const result = execSync('docker ps -a --filter name=cv-falkordb --format "{{.Status}}|{{.Ports}}"', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    }).trim();
-
-    if (!result) {
-      return { running: false };
-    }
-
-    const isRunning = result.toLowerCase().startsWith('up');
-
-    // Extract port from "0.0.0.0:6380->6379/tcp" format
-    const portMatch = result.match(/:(\d+)->6379/);
-    const port = portMatch ? parseInt(portMatch[1], 10) : undefined;
-
-    return {
-      running: isRunning,
-      port,
-      stopped: !isRunning
-    };
-  } catch {
-    return { running: false };
-  }
-}
-
-/**
- * Check if a Redis instance at the given URL is actually FalkorDB (has GRAPH module)
- */
-async function isFalkorDBInstance(url: string): Promise<boolean> {
-  try {
-    // Extract host and port from redis://host:port
-    const match = url.match(/redis:\/\/([^:]+):(\d+)/);
-    if (!match) return false;
-
-    const [, host, port] = match;
-
-    // Check if GRAPH module is loaded
-    const result = execSync(`redis-cli -h ${host} -p ${port} MODULE LIST`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      timeout: 2000
-    });
-
-    return result.toLowerCase().includes('graph');
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Start or create cv-git's FalkorDB container
- */
-async function ensureFalkorDB(spinner: any): Promise<{ url: string; started: boolean }> {
-  if (!isDockerAvailable()) {
-    throw new Error('Docker not available - FalkorDB requires Docker');
-  }
-
-  const containerInfo = getCVFalkorDBInfo();
-
-  // If our container is running, return its URL
-  if (containerInfo.running && containerInfo.port) {
-    const url = `redis://localhost:${containerInfo.port}`;
-    // Verify it's actually FalkorDB
-    if (await isFalkorDBInstance(url)) {
-      return { url, started: false };
-    }
-  }
-
-  // If our container exists but is stopped, start it
-  if (containerInfo.stopped && containerInfo.port) {
-    spinner.text = 'Starting cv-git FalkorDB container...';
-    execSync('docker start cv-falkordb', { stdio: 'ignore' });
-
-    // Wait for it to be ready
-    await waitForFalkorDB(containerInfo.port, spinner);
-    return { url: `redis://localhost:${containerInfo.port}`, started: true };
-  }
-
-  // Need to create a new container - find available port
-  spinner.text = 'Finding available port for FalkorDB...';
-  const port = findAvailablePort(6379);
-
-  spinner.text = `Creating FalkorDB container on port ${port}...`;
-  try {
-    execSync(`docker run -d --name cv-falkordb -p ${port}:6379 falkordb/falkordb:latest`, {
-      stdio: 'ignore'
-    });
-  } catch (error: any) {
-    // Container might already exist with wrong state - remove and retry
-    if (error.message?.includes('already in use')) {
-      execSync('docker rm -f cv-falkordb', { stdio: 'ignore' });
-      execSync(`docker run -d --name cv-falkordb -p ${port}:6379 falkordb/falkordb:latest`, {
-        stdio: 'ignore'
-      });
-    } else {
-      throw error;
-    }
-  }
-
-  await waitForFalkorDB(port, spinner);
-  return { url: `redis://localhost:${port}`, started: true };
-}
-
-/**
- * Wait for FalkorDB to be ready
- */
-async function waitForFalkorDB(port: number, spinner: any): Promise<void> {
-  spinner.text = 'Waiting for FalkorDB to start...';
-
-  for (let i = 0; i < 30; i++) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    try {
-      const result = execSync(`redis-cli -p ${port} MODULE LIST`, {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'ignore'],
-        timeout: 1000
-      });
-
-      if (result.toLowerCase().includes('graph')) {
-        return; // FalkorDB is ready
-      }
-    } catch {
-      // Not ready yet
-    }
-  }
-
-  throw new Error('FalkorDB did not start in time');
-}
-
-/**
- * Check if cv-git's Qdrant container is running and get its port
- */
-function getCVQdrantInfo(): { running: boolean; port?: number; stopped?: boolean } {
-  try {
-    // Check if our container exists and is running
-    const result = execSync('docker ps -a --filter name=cv-qdrant --format "{{.Status}}|{{.Ports}}"', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    }).trim();
-
-    if (!result) {
-      return { running: false };
-    }
-
-    const isRunning = result.toLowerCase().startsWith('up');
-
-    // Extract port from "0.0.0.0:6333->6333/tcp" format
-    const portMatch = result.match(/:(\d+)->6333/);
-    const port = portMatch ? parseInt(portMatch[1], 10) : undefined;
-
-    return {
-      running: isRunning,
-      port,
-      stopped: !isRunning
-    };
-  } catch {
-    return { running: false };
-  }
-}
-
-/**
- * Check if a Qdrant instance is available at the given URL
- */
-async function isQdrantInstance(url: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${url}/collections`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(2000)
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Start or create cv-git's Qdrant container
- */
-async function ensureQdrant(spinner: any): Promise<{ url: string; started: boolean }> {
-  if (!isDockerAvailable()) {
-    throw new Error('Docker not available - Qdrant requires Docker');
-  }
-
-  const containerInfo = getCVQdrantInfo();
-
-  // If our container is running, return its URL
-  if (containerInfo.running && containerInfo.port) {
-    const url = `http://localhost:${containerInfo.port}`;
-    // Verify it's actually Qdrant
-    if (await isQdrantInstance(url)) {
-      return { url, started: false };
-    }
-  }
-
-  // If our container exists but is stopped, start it
-  if (containerInfo.stopped && containerInfo.port) {
-    spinner.text = 'Starting cv-git Qdrant container...';
-    execSync('docker start cv-qdrant', { stdio: 'ignore' });
-
-    // Wait for it to be ready
-    await waitForQdrant(containerInfo.port, spinner);
-    return { url: `http://localhost:${containerInfo.port}`, started: true };
-  }
-
-  // Need to create a new container - find available port
-  spinner.text = 'Finding available port for Qdrant...';
-  const port = findAvailablePort(6333);
-
-  spinner.text = `Creating Qdrant container on port ${port}...`;
-  try {
-    execSync(`docker run -d --name cv-qdrant -p ${port}:6333 qdrant/qdrant:latest`, {
-      stdio: 'ignore'
-    });
-  } catch (error: any) {
-    // Container might already exist with wrong state - remove and retry
-    if (error.message?.includes('already in use')) {
-      execSync('docker rm -f cv-qdrant', { stdio: 'ignore' });
-      execSync(`docker run -d --name cv-qdrant -p ${port}:6333 qdrant/qdrant:latest`, {
-        stdio: 'ignore'
-      });
-    } else {
-      throw error;
-    }
-  }
-
-  await waitForQdrant(port, spinner);
-  return { url: `http://localhost:${port}`, started: true };
-}
-
-/**
- * Wait for Qdrant to be ready
- */
-async function waitForQdrant(port: number, spinner: any): Promise<void> {
-  spinner.text = 'Waiting for Qdrant to start...';
-
-  for (let i = 0; i < 30; i++) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    try {
-      const response = await fetch(`http://localhost:${port}/collections`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(1000)
-      });
-
-      if (response.ok) {
-        return; // Qdrant is ready
-      }
-    } catch {
-      // Not ready yet
-    }
-  }
-
-  throw new Error('Qdrant did not start in time');
-}
+import { ensureFalkorDB, ensureQdrant, isDockerAvailable } from '../utils/infrastructure.js';
 
 export function syncCommand(): Command {
   const cmd = new Command('sync');
@@ -342,6 +50,9 @@ export function syncCommand(): Command {
           process.exit(1);
         }
 
+        // Check if this is a workspace
+        const workspace = await loadWorkspace(repoRoot);
+
         // Load configuration
         spinner = output.spinner('Loading configuration...').start();
         const config = await configManager.load(repoRoot);
@@ -349,6 +60,15 @@ export function syncCommand(): Command {
         spinner.succeed('Configuration loaded');
         displayCompactStatus(credStatus);
 
+        if (workspace) {
+          // Workspace mode - sync all repos
+          console.log(chalk.cyan(`\nWorkspace: ${workspace.name}`));
+          console.log(chalk.gray(`Repos: ${workspace.repos.map(r => r.name).join(', ')}\n`));
+          await syncWorkspace(workspace, config, options, output);
+          return;
+        }
+
+        // Single repo mode
         // Initialize components
         spinner = output.spinner('Initializing components...').start();
 
@@ -363,26 +83,23 @@ export function syncCommand(): Command {
         const parser = createParser();
 
         // Graph manager - auto-start FalkorDB if configured for embedded mode
-        let graphUrl = config.graph.url;
+        spinner.text = 'Setting up FalkorDB...';
 
-        spinner.text = 'Checking FalkorDB...';
+        const falkorInfo = await ensureFalkorDB({ silent: true });
+        if (!falkorInfo) {
+          spinner.fail('FalkorDB not available (Docker required)');
+          process.exit(1);
+        }
 
-        // Check if configured URL is actually FalkorDB
-        const isConfiguredFalkor = await isFalkorDBInstance(graphUrl);
+        const graphUrl = falkorInfo.url;
+        if (falkorInfo.started) {
+          spinner.succeed(`FalkorDB started on ${graphUrl}`);
+        } else {
+          spinner.succeed(`Using FalkorDB at ${graphUrl}`);
+        }
 
-        if (!isConfiguredFalkor && config.graph.embedded !== false) {
-          // Need to start our own FalkorDB instance
-          spinner.text = 'FalkorDB not found, setting up...';
-          const falkorInfo = await ensureFalkorDB(spinner);
-          graphUrl = falkorInfo.url;
-
-          if (falkorInfo.started) {
-            spinner.succeed(`FalkorDB started on ${graphUrl}`);
-          } else {
-            spinner.succeed(`Using existing FalkorDB at ${graphUrl}`);
-          }
-
-          // Update config with the actual URL we're using
+        // Update config with the actual URL we're using
+        if (graphUrl !== config.graph.url) {
           await configManager.update({ graph: { ...config.graph, url: graphUrl } });
         }
 
@@ -416,40 +133,38 @@ export function syncCommand(): Command {
           output.debug(`Credential manager error: ${credError.message}`);
         }
 
-        // Set OpenRouter key in env for VectorManager to pick up
-        if (openrouterApiKey && !process.env.OPENROUTER_API_KEY) {
-          process.env.OPENROUTER_API_KEY = openrouterApiKey;
+        // Configure embedding provider for VectorManager
+        if (openrouterApiKey && !openaiApiKey) {
+          // Use OpenRouter for embeddings when no OpenAI key is available
+          if (!process.env.OPENROUTER_API_KEY) {
+            process.env.OPENROUTER_API_KEY = openrouterApiKey;
+          }
+          if (!process.env.CV_EMBEDDING_MODEL) {
+            process.env.CV_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+          }
         }
 
         if ((openaiApiKey || openrouterApiKey) && config.vector) {
-          spinner = output.spinner('Checking Qdrant...').start();
-          let qdrantUrl = config.vector.url;
+          spinner = output.spinner('Setting up Qdrant...').start();
 
-          // Check if configured URL is actually Qdrant
-          const isConfiguredQdrant = await isQdrantInstance(qdrantUrl);
+          const qdrantInfo = await ensureQdrant({ silent: true });
+          let qdrantUrl = '';
 
-          if (!isConfiguredQdrant && config.vector.embedded !== false) {
-            // Need to start our own Qdrant instance
-            spinner.text = 'Qdrant not found, setting up...';
-            try {
-              const qdrantInfo = await ensureQdrant(spinner);
-              qdrantUrl = qdrantInfo.url;
-
-              if (qdrantInfo.started) {
-                spinner.succeed(`Qdrant started on ${qdrantUrl}`);
-              } else {
-                spinner.succeed(`Using existing Qdrant at ${qdrantUrl}`);
-              }
-
-              // Update config with the actual URL we're using
-              await configManager.update({ vector: { ...config.vector, url: qdrantUrl } });
-            } catch (qdrantError: any) {
-              spinner.warn(`Could not start Qdrant: ${qdrantError.message}`);
-              output.info('Continuing without vector search...');
-              qdrantUrl = '';
+          if (qdrantInfo) {
+            qdrantUrl = qdrantInfo.url;
+            if (qdrantInfo.started) {
+              spinner.succeed(`Qdrant started on ${qdrantUrl}`);
+            } else {
+              spinner.succeed(`Using Qdrant at ${qdrantUrl}`);
             }
-          } else if (isConfiguredQdrant) {
-            spinner.succeed(`Using Qdrant at ${qdrantUrl}`);
+
+            // Update config with the actual URL we're using
+            if (qdrantUrl !== config.vector.url) {
+              await configManager.update({ vector: { ...config.vector, url: qdrantUrl } });
+            }
+          } else {
+            spinner.warn('Qdrant not available (Docker required)');
+            output.info('Continuing without vector search...');
           }
 
           if (qdrantUrl) {
@@ -574,6 +289,214 @@ export function syncCommand(): Command {
     });
 
   return cmd;
+}
+
+/**
+ * Sync all repos in a workspace
+ */
+async function syncWorkspace(
+  workspace: CVWorkspace,
+  config: any,
+  options: any,
+  output: any
+): Promise<void> {
+  let spinner = output.spinner('Setting up infrastructure...').start();
+
+  // Set up infrastructure (shared across all repos)
+  const falkorInfo = await ensureFalkorDB({ silent: true });
+  if (!falkorInfo) {
+    spinner.fail('FalkorDB not available (Docker required)');
+    process.exit(1);
+  }
+  spinner.succeed(`Using FalkorDB at ${falkorInfo.url}`);
+
+  // Set up Qdrant if we have API keys
+  let openaiApiKey = config.ai?.apiKey || process.env.OPENAI_API_KEY;
+  let openrouterApiKey = process.env.OPENROUTER_API_KEY;
+
+  try {
+    const credentials = new CredentialManager();
+    await credentials.init();
+    if (!openaiApiKey) {
+      openaiApiKey = await credentials.getOpenAIKey() || undefined;
+    }
+    if (!openrouterApiKey) {
+      openrouterApiKey = await credentials.getOpenRouterKey() || undefined;
+    }
+  } catch {
+    // Credential manager not available
+  }
+
+  let qdrantUrl: string | null = null;
+  if (openaiApiKey || openrouterApiKey) {
+    const qdrantInfo = await ensureQdrant({ silent: true });
+    if (qdrantInfo) {
+      qdrantUrl = qdrantInfo.url;
+      spinner = output.spinner(`Using Qdrant at ${qdrantUrl}`).start();
+      spinner.succeed(`Using Qdrant at ${qdrantUrl}`);
+    }
+  }
+
+  // Connect to graph with workspace database name
+  spinner = output.spinner('Connecting to graph database...').start();
+  const graph = createGraphManager(falkorInfo.url, workspace.graphDatabase);
+  await graph.connect();
+  spinner.succeed(`Connected to graph: ${workspace.graphDatabase}`);
+
+  // Set up vector if available
+  let vector: any = null;
+  if (qdrantUrl && (openaiApiKey || openrouterApiKey)) {
+    // Configure embedding provider
+    if (openrouterApiKey && !openaiApiKey) {
+      // Use OpenRouter for embeddings when no OpenAI key is available
+      if (!process.env.OPENROUTER_API_KEY) {
+        process.env.OPENROUTER_API_KEY = openrouterApiKey;
+      }
+      if (!process.env.CV_EMBEDDING_MODEL) {
+        process.env.CV_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+      }
+    }
+    try {
+      vector = createVectorManager(
+        qdrantUrl,
+        openaiApiKey,
+        config.vector?.collections || { codeChunks: 'code_chunks', docstrings: 'docstrings', commits: 'commits' }
+      );
+      await vector.connect();
+    } catch {
+      output.warn('Vector DB not available, continuing without embeddings');
+    }
+  }
+
+  // Track overall stats
+  const overallStats = {
+    reposProcessed: 0,
+    totalFiles: 0,
+    totalSymbols: 0,
+    totalEdges: 0,
+    totalVectors: 0,
+    errors: [] as string[],
+  };
+
+  console.log();
+
+  // Sync each repo
+  for (const repo of workspace.repos) {
+    console.log(chalk.bold(`\n📁 Syncing ${repo.name}...`));
+
+    try {
+      const repoStats = await syncSingleRepoInWorkspace(
+        repo,
+        workspace,
+        graph,
+        vector,
+        config,
+        options,
+        output
+      );
+
+      overallStats.reposProcessed++;
+      overallStats.totalFiles += repoStats.fileCount || 0;
+      overallStats.totalSymbols += repoStats.symbolCount || 0;
+      overallStats.totalEdges += repoStats.edgeCount || 0;
+      overallStats.totalVectors += repoStats.vectorCount || 0;
+
+      // Update workspace.json with sync status
+      repo.synced = true;
+      repo.lastSyncedCommit = repoStats.lastCommit;
+
+      console.log(chalk.green(`   ✓ ${repo.name}: ${repoStats.fileCount} files, ${repoStats.symbolCount} symbols`));
+    } catch (error: any) {
+      console.log(chalk.red(`   ✗ ${repo.name}: ${error.message}`));
+      overallStats.errors.push(`${repo.name}: ${error.message}`);
+    }
+  }
+
+  // Save updated workspace
+  workspace.lastSyncedAt = new Date().toISOString();
+  await saveWorkspace(workspace);
+
+  // Close connections
+  await graph.close();
+  if (vector) {
+    await vector.close();
+  }
+
+  // Display results
+  console.log();
+  console.log(chalk.bold('Workspace Sync Complete'));
+  console.log(chalk.gray('─'.repeat(50)));
+  console.log(chalk.cyan('  Repos synced:      '), `${overallStats.reposProcessed}/${workspace.repos.length}`);
+  console.log(chalk.cyan('  Total files:       '), overallStats.totalFiles);
+  console.log(chalk.cyan('  Total symbols:     '), overallStats.totalSymbols);
+  console.log(chalk.cyan('  Relationships:     '), overallStats.totalEdges);
+  if (overallStats.totalVectors > 0) {
+    console.log(chalk.cyan('  Vectors stored:    '), overallStats.totalVectors);
+  }
+  console.log(chalk.gray('─'.repeat(50)));
+
+  if (overallStats.errors.length > 0) {
+    console.log(chalk.yellow(`\n⚠ ${overallStats.errors.length} repo(s) had errors`));
+  }
+
+  console.log();
+  console.log(chalk.bold('Next steps:'));
+  console.log(chalk.gray('  • Use AI code assistant:'), chalk.cyan('cv code'));
+  console.log(chalk.gray('  • Search across repos:  '), chalk.cyan('cv find "authentication"'));
+  console.log();
+}
+
+/**
+ * Sync a single repo within a workspace context
+ */
+async function syncSingleRepoInWorkspace(
+  repo: WorkspaceRepo,
+  workspace: CVWorkspace,
+  graph: any,
+  vector: any,
+  config: any,
+  options: any,
+  output: any
+): Promise<{
+  fileCount: number;
+  symbolCount: number;
+  edgeCount: number;
+  vectorCount: number;
+  lastCommit?: string;
+}> {
+  const repoPath = repo.absolutePath;
+
+  // Create git manager for this repo
+  const git = createGitManager(repoPath);
+  if (!(await git.isGitRepo())) {
+    throw new Error('Not a git repository');
+  }
+
+  // Get current commit
+  const commits = await git.getRecentCommits(1);
+  const lastCommit = commits.length > 0 ? commits[0].sha : undefined;
+
+  // Create parser
+  const parser = createParser();
+
+  // Create sync engine with repo prefix for file paths
+  const syncEngine = createSyncEngine(repoPath, git, parser, graph, vector);
+
+  // Run sync with repo name prefix
+  const syncState = await syncEngine.fullSync({
+    excludePatterns: config.sync?.excludePatterns || [],
+    includeLanguages: config.sync?.includeLanguages || [],
+    // The sync engine will need to prefix paths with repo name
+    // For now, we'll use the standard sync
+  });
+
+  return {
+    fileCount: syncState.fileCount,
+    symbolCount: syncState.symbolCount,
+    edgeCount: syncState.edgeCount,
+    vectorCount: syncState.vectorCount || 0,
+    lastCommit,
+  };
 }
 
 function displaySyncResults(syncState: any): void {

@@ -220,7 +220,10 @@ export class SyncEngine {
     const content = await fs.readFile(absolutePath, 'utf-8');
     const language = detectLanguage(filePath);
 
-    return await this.parser.parseFile(filePath, content, language);
+    const parsed = await this.parser.parseFile(filePath, content, language);
+    // Ensure absolutePath is correctly set (parser may not know the repo root)
+    parsed.absolutePath = absolutePath;
+    return parsed;
   }
 
   /**
@@ -229,10 +232,14 @@ export class SyncEngine {
   private async updateGraph(parsedFiles: ParsedFile[]): Promise<void> {
     console.log('Creating file nodes...');
 
+    // Get git hashes for all files in batch (more efficient than per-file)
+    const filePaths = parsedFiles.map(f => f.path);
+    const gitHashes = await this.git.getFileHashes(filePaths);
+
     // Step 1: Create/update file nodes
     for (const file of parsedFiles) {
       const stats = await fs.stat(file.absolutePath);
-      const gitHash = ''; // TODO: Get from git
+      const gitHash = gitHashes.get(file.path) || '';
 
       const fileNode: FileNode = {
         path: file.path,

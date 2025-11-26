@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { AIClient, AIMessage, AIStreamHandler, RECOMMENDED_MODELS } from './types.js';
 
 export interface OpenRouterOptions {
   apiKey: string;
@@ -12,24 +13,20 @@ export interface OpenRouterOptions {
   temperature?: number;
 }
 
-export interface OpenRouterStreamHandler {
-  onToken?: (token: string) => void;
-  onComplete?: (fullText: string) => void;
-  onError?: (error: Error) => void;
-}
-
-// Simple message type for OpenRouter (doesn't require timestamp)
-export interface OpenRouterMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
+// Re-export for backwards compatibility
+export type OpenRouterStreamHandler = AIStreamHandler;
+export type OpenRouterMessage = AIMessage;
 
 // Popular models available on OpenRouter
 export const OPENROUTER_MODELS = {
-  // Anthropic
+  // Anthropic Claude 4 (latest)
+  'claude-sonnet-4': 'anthropic/claude-sonnet-4',
+  'claude-opus-4': 'anthropic/claude-opus-4',
+  // Anthropic Claude 3.5/3.7 (Sonnet)
+  'claude-sonnet-4-5': 'anthropic/claude-3.5-sonnet',  // Alias - maps to latest sonnet
   'claude-3.5-sonnet': 'anthropic/claude-3.5-sonnet',
-  'claude-3-opus': 'anthropic/claude-3-opus',
-  'claude-3-sonnet': 'anthropic/claude-3-sonnet',
+  'claude-3.7-sonnet': 'anthropic/claude-3.7-sonnet',
+  // Anthropic Claude 3 (Haiku - fast/cheap)
   'claude-3-haiku': 'anthropic/claude-3-haiku',
 
   // OpenAI
@@ -50,13 +47,14 @@ export const OPENROUTER_MODELS = {
   'mistral-large': 'mistralai/mistral-large',
 
   // DeepSeek
-  'deepseek-chat': 'deepseek/deepseek-chat',
-  'deepseek-coder': 'deepseek/deepseek-coder',
+  'deepseek-chat': 'deepseek/deepseek-chat-v3-0324',
+  'deepseek-coder': 'deepseek/deepseek-chat-v3-0324',  // DeepSeek v3 is great for code
+  'deepseek-v3': 'deepseek/deepseek-chat-v3-0324',
 } as const;
 
 export type ModelAlias = keyof typeof OPENROUTER_MODELS;
 
-export class OpenRouterClient {
+export class OpenRouterClient implements AIClient {
   private client: OpenAI;
   private model: string;
   private maxTokens: number;
@@ -73,11 +71,18 @@ export class OpenRouterClient {
     });
 
     // Resolve model alias or use directly
-    const modelInput = options.model || 'claude-3.5-sonnet';
+    const modelInput = options.model || 'claude-sonnet-4-5';
     this.model = OPENROUTER_MODELS[modelInput as ModelAlias] || modelInput;
 
-    this.maxTokens = options.maxTokens || 4096;
+    this.maxTokens = options.maxTokens || 128000;
     this.temperature = options.temperature || 0.7;
+  }
+
+  /**
+   * Get the provider name
+   */
+  getProvider(): string {
+    return 'openrouter';
   }
 
   /**
@@ -95,9 +100,22 @@ export class OpenRouterClient {
   }
 
   /**
+   * Check if the client is ready (API key valid)
+   */
+  async isReady(): Promise<boolean> {
+    try {
+      // Make a simple API call to verify the key
+      await this.client.models.list();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Chat completion (non-streaming)
    */
-  async chat(messages: OpenRouterMessage[], systemPrompt?: string): Promise<string> {
+  async chat(messages: AIMessage[], systemPrompt?: string): Promise<string> {
     const openaiMessages: OpenAI.ChatCompletionMessageParam[] = [];
 
     if (systemPrompt) {
@@ -125,9 +143,9 @@ export class OpenRouterClient {
    * Chat completion with streaming
    */
   async chatStream(
-    messages: OpenRouterMessage[],
+    messages: AIMessage[],
     systemPrompt?: string,
-    handler?: OpenRouterStreamHandler
+    handler?: AIStreamHandler
   ): Promise<string> {
     const openaiMessages: OpenAI.ChatCompletionMessageParam[] = [];
 
@@ -173,7 +191,7 @@ export class OpenRouterClient {
   /**
    * Simple completion (single prompt)
    */
-  async complete(prompt: string, handler?: OpenRouterStreamHandler): Promise<string> {
+  async complete(prompt: string, handler?: AIStreamHandler): Promise<string> {
     return this.chatStream(
       [{ role: 'user', content: prompt }],
       undefined,
@@ -187,4 +205,13 @@ export class OpenRouterClient {
  */
 export function createOpenRouterClient(options: OpenRouterOptions): OpenRouterClient {
   return new OpenRouterClient(options);
+}
+
+/**
+ * Get recommended OpenRouter models for code editing
+ */
+export function getRecommendedOpenRouterModels(): string[] {
+  return Object.entries(RECOMMENDED_MODELS)
+    .filter(([_, info]) => info.provider === 'openrouter' && info.recommended)
+    .map(([key, _]) => key);
 }

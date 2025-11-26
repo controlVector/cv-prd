@@ -285,9 +285,23 @@ export class VectorManager {
   }
 
   /**
-   * Generate embedding for text using OpenAI
+   * Generate embedding for text
    */
   async embed(text: string): Promise<number[]> {
+    // Use the appropriate provider
+    if (this.embeddingProvider === 'ollama') {
+      return this.embedWithOllama(text);
+    }
+
+    if (this.embeddingProvider === 'openrouter') {
+      if (!this.openrouter) {
+        throw new VectorError('OpenRouter client not initialized');
+      }
+      const result = await this.embedWithOpenRouter(text);
+      return result.embeddings[0];
+    }
+
+    // OpenAI direct
     if (!this.openai) {
       throw new VectorError('OpenAI client not initialized');
     }
@@ -439,6 +453,24 @@ export class VectorManager {
       return this.embedBatchWithOllama(texts);
     }
 
+    // If using OpenRouter, use OpenRouter batch
+    if (this.embeddingProvider === 'openrouter') {
+      if (!this.openrouter) {
+        throw new VectorError('OpenRouter client not initialized');
+      }
+      const batchSize = 100;
+      const batches = chunkArray(texts, batchSize);
+      const allEmbeddings: number[][] = [];
+
+      for (const batch of batches) {
+        const result = await this.embedWithOpenRouter(batch);
+        allEmbeddings.push(...result.embeddings);
+      }
+
+      return allEmbeddings;
+    }
+
+    // Using OpenAI directly
     if (!this.openai) {
       throw new VectorError('OpenAI client not initialized');
     }

@@ -320,6 +320,42 @@ export interface GitDiff {
   changes: string;
 }
 
+// ========== Workspace Types ==========
+
+/**
+ * Workspace configuration for multi-repo setups
+ * Stored in .cv/workspace.json at the workspace root
+ */
+export interface CVWorkspace {
+  version: string;
+  name: string;
+  /** Workspace root directory (absolute path) */
+  root: string;
+  /** List of repositories in this workspace */
+  repos: WorkspaceRepo[];
+  /** When the workspace was created */
+  createdAt: string;
+  /** Last time workspace was synced */
+  lastSyncedAt?: string;
+  /** Graph database name for this workspace */
+  graphDatabase: string;
+}
+
+export interface WorkspaceRepo {
+  /** Repo name (directory name) */
+  name: string;
+  /** Relative path from workspace root */
+  path: string;
+  /** Absolute path to the repo */
+  absolutePath: string;
+  /** Whether this repo has been synced */
+  synced: boolean;
+  /** Last commit that was synced */
+  lastSyncedCommit?: string;
+  /** Primary language detected */
+  primaryLanguage?: string;
+}
+
 // ========== Config Types ==========
 
 export interface CVConfig {

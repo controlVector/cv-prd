@@ -4,6 +4,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { CVWorkspace, WorkspaceRepo } from './types.js';
 
 /**
  * Get the .cv directory path for a repository
@@ -219,4 +220,145 @@ export async function retry<T>(
   }
 
   throw lastError;
+}
+
+// ========== Workspace Utilities ==========
+
+/**
+ * Check if a directory is a git repository
+ */
+export async function isGitRepo(dir: string): Promise<boolean> {
+  try {
+    const gitDir = path.join(dir, '.git');
+    const stat = await fs.stat(gitDir);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a directory is a CV workspace (has workspace.json)
+ */
+export async function isWorkspace(dir: string): Promise<boolean> {
+  try {
+    const workspacePath = path.join(dir, '.cv', 'workspace.json');
+    await fs.access(workspacePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find git repositories in child directories
+ */
+export async function findChildGitRepos(dir: string): Promise<WorkspaceRepo[]> {
+  const repos: WorkspaceRepo[] = [];
+
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) {
+        continue;
+      }
+
+      const childPath = path.join(dir, entry.name);
+
+      if (await isGitRepo(childPath)) {
+        repos.push({
+          name: entry.name,
+          path: entry.name,
+          absolutePath: childPath,
+          synced: false,
+        });
+      }
+    }
+  } catch {
+    // Directory not readable
+  }
+
+  return repos;
+}
+
+/**
+ * Load workspace configuration
+ */
+export async function loadWorkspace(dir: string): Promise<CVWorkspace | null> {
+  try {
+    const workspacePath = path.join(dir, '.cv', 'workspace.json');
+    const data = await fs.readFile(workspacePath, 'utf-8');
+    return JSON.parse(data) as CVWorkspace;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save workspace configuration
+ */
+export async function saveWorkspace(workspace: CVWorkspace): Promise<void> {
+  const workspacePath = path.join(workspace.root, '.cv', 'workspace.json');
+  await fs.writeFile(workspacePath, JSON.stringify(workspace, null, 2));
+}
+
+/**
+ * Find workspace root (searches up from current directory)
+ */
+export async function findWorkspaceRoot(startDir: string = process.cwd()): Promise<string | null> {
+  let currentDir = path.resolve(startDir);
+  const root = path.parse(currentDir).root;
+
+  while (currentDir !== root) {
+    if (await isWorkspace(currentDir)) {
+      return currentDir;
+    }
+    currentDir = path.dirname(currentDir);
+  }
+
+  return null;
+}
+
+/**
+ * Detect project type: 'workspace', 'repo', or 'none'
+ */
+export async function detectProjectType(dir: string): Promise<{
+  type: 'workspace' | 'repo' | 'none';
+  root: string | null;
+  childRepos?: WorkspaceRepo[];
+}> {
+  // First check if it's already a CV workspace
+  if (await isWorkspace(dir)) {
+    return { type: 'workspace', root: dir };
+  }
+
+  // Check if it's a CV repo
+  if (await isCVRepo(dir)) {
+    return { type: 'repo', root: dir };
+  }
+
+  // Check if it's a git repo (potential single repo init)
+  if (await isGitRepo(dir)) {
+    return { type: 'repo', root: dir };
+  }
+
+  // Check if there are child git repos (potential workspace)
+  const childRepos = await findChildGitRepos(dir);
+  if (childRepos.length > 0) {
+    return { type: 'workspace', root: dir, childRepos };
+  }
+
+  return { type: 'none', root: null };
+}
+
+/**
+ * Generate a safe database name from workspace/repo name
+ */
+export function generateDatabaseName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 }
