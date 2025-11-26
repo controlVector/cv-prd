@@ -2,6 +2,62 @@
 
 All notable changes to CV-Git will be documented in this file.
 
+## [0.3.0] - 2025-11-25
+
+### Added
+
+#### AI-Native Chat Interface
+- **`cv chat`** - Interactive AI chat with knowledge graph context
+  - One-shot mode: `cv chat "how does auth work"`
+  - Interactive REPL with `/commands` (`/help`, `/model`, `/clear`, `/quit`)
+  - Model selection: `-m gpt-4o`, `-m llama-3.1-70b`, `-m deepseek-coder`
+  - Auto-injects relevant code context from knowledge graph
+  - Supports 15+ models via OpenRouter (Claude, GPT-4, Gemini, Llama, Mistral, DeepSeek)
+
+#### Context Generation for AI Assistants
+- **`cv context`** - Generate rich context for external AI tools
+  - Outputs markdown, XML, or JSON formats
+  - Includes code chunks, graph relationships, and file contents
+  - Designed for Claude Code, Aider, Cursor, etc.
+- **`cv_context` MCP tool** - Same functionality exposed via MCP protocol
+
+#### Auto-Sync on Push
+- **`cv push`** - Git push with automatic knowledge graph sync
+  - Runs `git push` then `cv sync --incremental`
+  - Options: `--skip-sync`, `--sync-only`, `--force`
+- **`cv hooks`** - Git hook management for auto-sync
+  - `cv hooks install` - Install post-commit/post-merge hooks
+  - `cv hooks uninstall` - Remove hooks cleanly
+  - `cv hooks status` - Show installed hooks
+  - Preserves existing hooks when installing
+
+#### Design-First Scaffolding
+- **`cv design`** - Generate architecture from natural language
+  - AI creates modules, types, functions, and relationships
+  - Validates design (circular deps, type coherence)
+  - Outputs: Mermaid diagrams, scaffold files, graph nodes
+  - Interactive refinement mode (`--interactive`)
+  - Supports all OpenRouter models (`--model`)
+
+### Changed
+
+#### Simplified Credential Storage
+- Plain file fallback for systems without keychain (WSL, headless Linux)
+- No longer requires `CV_MASTER_PASSWORD` environment variable
+- Credentials stored in `~/.cv-git/credentials.json` (chmod 600)
+- Follows pattern of aws, gh, gcloud CLIs
+
+#### OpenRouter Integration
+- Embedding support integrated into credential flow
+- Configuration status display improvements
+- Full model selection across all AI commands
+
+### Fixed
+- Credential storage UX on WSL and headless systems
+- Master password prompt loop eliminated
+
+---
+
 ## [0.2.0] - 2024-11-21
 
 ### Added
@@ -79,5 +135,6 @@ All notable changes to CV-Git will be documented in this file.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 0.3.0 | 2025-11-25 | AI chat, auto-sync, design-first scaffolding |
 | 0.2.0 | 2024-11-21 | Feature complete, production ready |
 | 0.1.0 | 2024-11-01 | Initial development release |
