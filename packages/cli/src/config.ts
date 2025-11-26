@@ -67,8 +67,8 @@ const DEFAULT_CONFIG: CVGitConfig = {
   },
   ai: {
     provider: 'anthropic',
-    model: 'claude-3-5-sonnet-20241022',
-    maxTokens: 4096,
+    model: 'claude-sonnet-4-5-20250514',
+    maxTokens: 128000,
     temperature: 0.7,
   },
   graph: {

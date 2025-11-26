@@ -1,9 +1,8 @@
 # CV-Git Roadmap to Production
 
-**Current Version:** 0.2.0
+**Current Version:** 0.3.0
 **Target Version:** 1.0.0 (Production Ready)
-**Timeline:** 4 weeks
-**Focus:** CLI Excellence + MCP Integration + cvPRD Connectivity
+**Focus:** CLI Excellence + MCP Integration + cvPRD Connectivity + Distribution
 
 ---
 
@@ -458,5 +457,158 @@ Result: Fully automated requirement → code flow! 🚀
 **Let's build the future of AI-native development!**
 
 The CLI will be rock-solid, AI agents will have full access via MCP, and requirements will flow seamlessly into code through cvPRD integration.
+
+---
+
+## Future Initiatives (Post 1.0)
+
+### 1. cvPRD Integration for `cv design` Command
+**Priority:** High
+**Status:** TODO marker at `packages/cli/src/commands/design.ts:142`
+
+The `cv design` command currently generates architecture scaffolding from natural language descriptions. Integrate with cvPRD to:
+- Fetch requirements directly from cvPRD by ID
+- Use requirement context (acceptance criteria, technical specs) to inform design
+- Link generated design artifacts back to requirements
+- Track design→implementation coverage
+
+```bash
+# Target usage
+cv design --from-prd REQ-123       # Generate design from cvPRD requirement
+cv design --from-prd REQ-123,REQ-124  # Multiple requirements
+```
+
+**Implementation:**
+- Add `--from-prd` flag to design command
+- Use `@cv-git/prd-client` to fetch requirement details
+- Enrich AI context with requirement acceptance criteria
+- Auto-link generated files to requirement in cvPRD
+
+---
+
+### 2. Aider Integration for AI-Assisted Coding
+**Priority:** High
+**Status:** Not started
+
+Integrate with [Aider](https://aider.chat) to provide a seamless coding experience that leverages CV-Git's knowledge graph for context.
+
+**Goals:**
+- Provide CV-Git context (graph, semantic search) to Aider sessions
+- Allow Aider to query the knowledge graph for relevant code
+- Auto-sync after Aider makes changes
+- Bridge `cv chat` with Aider's editing capabilities
+
+**Approach Options:**
+
+Option A: **Context Injection**
+```bash
+cv aider "add authentication to the API"
+# CV-Git gathers context, passes to Aider with --message-file
+```
+
+Option B: **MCP Bridge**
+- Expose CV-Git as an MCP server that Aider can use
+- Aider calls CV-Git tools for context during editing
+
+Option C: **Aider Plugin/Extension**
+- Build a custom Aider extension that uses CV-Git APIs
+- Deep integration with Aider's architect/editor modes
+
+**Target Commands:**
+```bash
+cv aider [task]               # Start Aider with CV-Git context
+cv aider --architect [task]   # Use architect mode
+cv chat --editor aider        # Use Aider as backend for cv chat
+```
+
+---
+
+### 3. Single Executable Distribution 🎯
+**Priority:** Critical (significantly improves adoption)
+**Status:** Not started
+**Effort:** Large
+
+Currently CV-Git requires:
+- Node.js 18+
+- pnpm install (downloads 100+ npm packages)
+- Native module compilation (tree-sitter, keytar)
+- Docker for FalkorDB and Qdrant
+
+**Goal:** Single binary download that "just works"
+
+**Approach: pkg + Bundled Dependencies**
+
+Use [pkg](https://github.com/vercel/pkg) or [bun build --compile](https://bun.sh/docs/bundler/executables) to create standalone executables.
+
+**Challenges:**
+1. **Native modules** (tree-sitter, keytar)
+   - tree-sitter: Pre-compile WASM versions or bundle .node files
+   - keytar: Already have PlainFileStorage fallback
+
+2. **Platform targets**
+   - Linux x64, arm64
+   - macOS x64, arm64 (Apple Silicon)
+   - Windows x64
+
+3. **Database dependencies**
+   - Option A: Require external Docker (document clearly)
+   - Option B: Bundle embedded alternatives (SQLite for graph, in-memory vectors)
+   - Option C: Cloud-hosted services (managed FalkorDB/Qdrant)
+
+**Implementation Plan:**
+
+Phase 1: Bundle the CLI
+```bash
+# Using pkg
+pnpm add -D pkg
+pkg dist/bundle.cjs --targets node18-linux-x64,node18-macos-x64,node18-win-x64
+
+# Or using Bun
+bun build ./src/index.ts --compile --outfile cv
+```
+
+Phase 2: Handle Native Modules
+- Use `@aspect/xxhash-wasm` instead of native xxhash (if used)
+- Bundle tree-sitter WASM grammar files
+- Fall back to PlainFileStorage for credentials (no keytar)
+
+Phase 3: Distribution
+```bash
+# Installation becomes:
+curl -fsSL https://cv-git.dev/install.sh | sh
+
+# Or download directly
+wget https://github.com/cv-git/releases/latest/cv-linux-x64
+chmod +x cv-linux-x64
+sudo mv cv-linux-x64 /usr/local/bin/cv
+```
+
+Phase 4: Embedded Database Option
+- Add `--embedded` mode using SQLite + in-memory vectors
+- Good for small repos, demos, offline use
+- Full mode still uses FalkorDB/Qdrant for production scale
+
+**Target Experience:**
+```bash
+# One-liner install
+curl -fsSL https://cv-git.dev/install.sh | sh
+
+# Immediate use
+cv init
+cv sync
+cv find "authentication logic"
+```
+
+**Estimated Effort:** 2-3 weeks for full implementation
+
+---
+
+## Priority Order
+
+1. **Single Executable** - Biggest impact on adoption, removes friction
+2. **cvPRD Integration** - Completes the requirements→code workflow
+3. **Aider Integration** - Enhances AI coding capabilities
+
+---
 
 Ready to start Week 1?

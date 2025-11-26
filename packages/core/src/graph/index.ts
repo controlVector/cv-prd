@@ -26,9 +26,14 @@ export class GraphManager {
   private client: RedisClientType | null = null;
   private graphName: string;
   private connected: boolean = false;
+  private instanceId: string;
 
   constructor(private url: string, private database: string = 'cv-git') {
     this.graphName = database;
+    this.instanceId = Math.random().toString(36).substring(7);
+    if (process.env.CV_DEBUG) {
+      console.log(`[GraphManager] Created instance ${this.instanceId}`);
+    }
   }
 
   /**
@@ -50,10 +55,27 @@ export class GraphManager {
 
       this.client.on('error', (err) => {
         console.error('Redis Client Error:', err);
+        this.connected = false;
+      });
+
+      this.client.on('end', () => {
+        this.connected = false;
+      });
+
+      this.client.on('reconnecting', () => {
+        this.connected = false;
+      });
+
+      this.client.on('ready', () => {
+        this.connected = true;
       });
 
       await this.client.connect();
       this.connected = true;
+
+      if (process.env.CV_DEBUG) {
+        console.log(`[GraphManager ${this.instanceId}] Connected, client exists: ${!!this.client}`);
+      }
 
       // Test connection with GRAPH.QUERY
       await this.ping();
@@ -163,7 +185,13 @@ export class GraphManager {
    */
   async query(cypher: string, params?: Record<string, any>): Promise<GraphQueryResult[]> {
     if (!this.client || !this.connected) {
-      throw new GraphError('Not connected to FalkorDB');
+      const state = {
+        instanceId: this.instanceId,
+        hasClient: !!this.client,
+        connected: this.connected,
+        clientReady: this.client?.isReady,
+      };
+      throw new GraphError(`Not connected to FalkorDB (state: ${JSON.stringify(state)})`);
     }
 
     try {
@@ -841,6 +869,9 @@ export class GraphManager {
    */
   async close(): Promise<void> {
     if (this.client && this.connected) {
+      if (process.env.CV_DEBUG) {
+        console.log(`[GraphManager] close() called - stack:`, new Error().stack);
+      }
       await this.client.quit();
       this.connected = false;
       this.client = null;
@@ -852,6 +883,13 @@ export class GraphManager {
    */
   isConnected(): boolean {
     return this.connected;
+  }
+
+  /**
+   * Get instance ID for debugging
+   */
+  getInstanceId(): string {
+    return this.instanceId;
   }
 }
 

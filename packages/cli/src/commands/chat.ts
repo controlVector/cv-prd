@@ -47,7 +47,7 @@ export function chatCommand(): Command {
   cmd
     .description('Interactive AI chat with codebase context')
     .argument('[question]', 'One-shot question (omit for interactive mode)')
-    .option('-m, --model <model>', 'Model to use (e.g., claude-3.5-sonnet, gpt-4o, llama-3.1-70b)')
+    .option('-m, --model <model>', 'Model to use (e.g., claude-sonnet-4-5, gpt-4o, llama-3.1-70b)')
     .option('--no-context', 'Disable automatic context injection')
     .option('-c, --context-limit <n>', 'Max code chunks to include', '5');
 
@@ -93,7 +93,7 @@ export function chatCommand(): Command {
       }
 
       // Initialize OpenRouter client
-      const model = options.model || 'claude-3.5-sonnet';
+      const model = options.model || 'claude-sonnet-4-5';
       const client = createOpenRouterClient({
         apiKey: openrouterApiKey,
         model,
@@ -171,7 +171,7 @@ export function chatCommand(): Command {
       console.log(chalk.bold('\nAvailable Models:\n'));
 
       const categories: Record<string, string[]> = {
-        'Anthropic': ['claude-3.5-sonnet', 'claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'],
+        'Anthropic': ['claude-sonnet-4-5', 'claude-opus-4', 'claude-3.5-sonnet', 'claude-3-haiku'],
         'OpenAI': ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
         'Google': ['gemini-pro', 'gemini-flash'],
         'Meta': ['llama-3.1-70b', 'llama-3.1-8b'],

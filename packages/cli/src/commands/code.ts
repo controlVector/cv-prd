@@ -291,8 +291,12 @@ export function codeCommand(): Command {
         try {
           graph = createGraphManager(infra.falkordb.url, graphDatabase);
           await graph.connect();
+          if (process.env.CV_DEBUG) {
+            console.log(`[code.ts] Graph connected: ${graph.isConnected()}`);
+          }
         } catch (e) {
           output.debug?.('Graph DB not available, continuing without relationships');
+          graph = null; // Reset to null if connection failed
         }
       }
 
@@ -326,14 +330,12 @@ export function codeCommand(): Command {
       }
       console.log();
 
-      // One-shot mode
+      // Process initial instruction if provided, then continue to interactive mode
       if (instruction) {
         await handleSingleInstruction(instruction, assistant, options.yes || false);
-        await cleanup(vector, graph);
-        return;
       }
 
-      // Interactive mode
+      // Always enter interactive mode (like Claude Code)
       await interactiveMode(assistant, options.yes || false);
       await cleanup(vector, graph);
 
@@ -527,7 +529,7 @@ async function handleSingleInstruction(
       onToken: (token) => {
         if (spinner.isSpinning) {
           spinner.stop();
-          process.stdout.write(chalk.cyan('Assistant: '));
+          process.stdout.write('\r\x1b[K'); // Clear line
         }
         process.stdout.write(token);
       },
@@ -564,10 +566,10 @@ async function interactiveMode(
     output: process.stdout,
   });
 
-  console.log(chalk.gray('Type instructions for code changes. Commands: /help, /quit\n'));
+  console.log(chalk.gray('Commands: /apply, /diff, /undo, /help, /quit (Ctrl+C to exit)\n'));
 
   const askQuestion = (): void => {
-    rl.question(chalk.green('You: '), async (input) => {
+    rl.question(chalk.green('> '), async (input) => {
       const trimmed = input.trim();
 
       if (!trimmed) {
@@ -594,7 +596,6 @@ async function interactiveMode(
             if (spinner.isSpinning) {
               spinner.stop();
               process.stdout.write('\r\x1b[K'); // Clear line
-              process.stdout.write(chalk.cyan('Assistant: '));
             }
             process.stdout.write(token);
           },

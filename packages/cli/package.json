@@ -18,6 +18,7 @@
     "@cv-git/core": "workspace:*",
     "@cv-git/credentials": "workspace:*",
     "@cv-git/platform": "workspace:*",
+    "@cv-git/prd-client": "workspace:*",
     "@cv-git/shared": "workspace:*",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.3",

@@ -39,6 +39,11 @@ export class ContextManager {
     tokenLimit: number = 100000
   ) {
     this.tokenLimit = tokenLimit;
+
+    // Debug: Check graph state when stored in ContextManager
+    if (process.env.CV_DEBUG && graph) {
+      console.log(`[ContextManager] Received graph instance ${graph.getInstanceId()}: connected=${graph.isConnected()}`);
+    }
   }
 
   /**
@@ -113,11 +118,17 @@ export class ContextManager {
 
     // 3. Graph-based search (supplement vector search or use as fallback)
     if (this.graph) {
+      if (process.env.CV_DEBUG) {
+        console.log(`[ContextManager] Starting graph search, graph connected: ${this.graph.isConnected()}`);
+      }
       await this.searchGraphForContext(snapshot, query, options);
+      if (process.env.CV_DEBUG) {
+        console.log(`[ContextManager] After graph search: ${snapshot.symbols.length} symbols, ${snapshot.files.length} files`);
+      }
     }
 
     // 4. Graph traversal for relationships
-    if (this.graph && snapshot.symbols.length > 0) {
+    if (this.graph && this.graph.isConnected() && snapshot.symbols.length > 0) {
       await this.enrichWithGraphContext(snapshot, options);
     }
 
@@ -133,7 +144,7 @@ export class ContextManager {
   }
 
   /**
-   * Load a file as context
+   * Load a file as context using relative path
    */
   private async loadFile(
     relativePath: string,
@@ -151,13 +162,39 @@ export class ContextManager {
   }
 
   /**
+   * Load a file using absolute path (for workspace mode)
+   * Derives the workspace-relative path from the absolute path
+   */
+  private async loadFileAbsolute(
+    absolutePath: string,
+    relativePath: string,
+    source: FileContext['source']
+  ): Promise<FileContext> {
+    const content = await fs.readFile(absolutePath, 'utf-8');
+
+    // Derive workspace-relative path from absolute path
+    // e.g., /home/user/workspace/RepoA/src/file.js -> RepoA/src/file.js
+    let workspaceRelativePath = relativePath;
+    if (absolutePath.startsWith(this.repoRoot)) {
+      workspaceRelativePath = absolutePath.slice(this.repoRoot.length + 1); // +1 for trailing slash
+    }
+
+    return {
+      path: workspaceRelativePath,
+      content,
+      relevanceScore: source === 'explicit' ? 1.0 : 0.5,
+      source,
+    };
+  }
+
+  /**
    * Enrich snapshot with graph relationships
    */
   private async enrichWithGraphContext(
     snapshot: ContextSnapshot,
     options: ContextOptions
   ): Promise<void> {
-    if (!this.graph) return;
+    if (!this.graph || !this.graph.isConnected()) return;
 
     const maxDepth = options.maxDepth || 2;
     const symbolNames = snapshot.symbols
@@ -213,7 +250,14 @@ export class ContextManager {
     query: string,
     options: ContextOptions
   ): Promise<void> {
+    // Check if graph is available and connected
     if (!this.graph) return;
+    if (!this.graph.isConnected()) {
+      if (process.env.CV_DEBUG) {
+        console.log(`[ContextManager] Graph not connected, skipping graph search`);
+      }
+      return;
+    }
 
     // Extract keywords from query (simple tokenization)
     const keywords = this.extractKeywords(query);
@@ -223,26 +267,49 @@ export class ContextManager {
     const maxGraphResults = snapshot.symbols.length >= 5 ? 5 : 15;
 
     try {
+      // Debug: log keywords being searched and graph state
+      if (process.env.CV_DEBUG) {
+        console.log(`[ContextManager] this.graph exists: ${!!this.graph}, instance: ${this.graph?.getInstanceId()}`);
+        if (this.graph) {
+          const graphAny = this.graph as any;
+          console.log(`[ContextManager] Graph state before query: connected=${this.graph.isConnected()}, hasClient=${!!graphAny?.client}`);
+        }
+        console.log(`[ContextManager] Searching graph for keywords: ${keywords.slice(0, 3).join(', ')}`);
+      }
+
       // Search for symbols matching keywords
       for (const keyword of keywords.slice(0, 3)) {
         // Search by symbol name (case-insensitive)
+        if (process.env.CV_DEBUG) {
+          console.log(`[ContextManager] Searching for symbols with keyword: ${keyword}`);
+        }
+        // Query symbols and join with their files to get absolutePath
         const symbolResults = await this.graph.query(
           `
           MATCH (s:Symbol)
           WHERE toLower(s.name) CONTAINS toLower($keyword)
              OR toLower(s.qualifiedName) CONTAINS toLower($keyword)
+          OPTIONAL MATCH (f:File {path: s.file})
           RETURN s.name as name, s.qualifiedName as qualifiedName, s.file as file,
                  s.kind as kind, s.signature as signature, s.docstring as docstring,
-                 s.startLine as startLine, s.endLine as endLine
+                 s.startLine as startLine, s.endLine as endLine,
+                 f.absolutePath as absolutePath
           LIMIT $limit
           `,
           { keyword, limit: Math.ceil(maxGraphResults / keywords.length) }
         );
 
+        if (process.env.CV_DEBUG) {
+          console.log(`[ContextManager] Found ${symbolResults.length} symbols for '${keyword}'`);
+          if (symbolResults.length > 0) {
+            console.log(`[ContextManager] First result:`, JSON.stringify(symbolResults[0]).slice(0, 300));
+          }
+        }
+
         for (const result of symbolResults) {
           if (!result.name) continue;
 
-          const symbolContext: SymbolContext = {
+          const symbolContext: SymbolContext & { absolutePath?: string } = {
             name: result.name,
             qualifiedName: result.qualifiedName || result.name,
             file: result.file,
@@ -253,6 +320,10 @@ export class ContextManager {
             docstring: result.docstring,
             relevanceScore: 0.6, // Graph results get moderate relevance
           };
+          // Store absolutePath for file loading in workspace mode
+          if (result.absolutePath) {
+            (symbolContext as any).absolutePath = result.absolutePath;
+          }
 
           // Avoid duplicates
           if (
@@ -292,8 +363,47 @@ export class ContextManager {
           }
         }
       }
-    } catch {
-      // Graph search failed, continue without it
+
+      // Load actual file content for symbols found (important for accurate edits)
+      // Collect unique files with their absolute paths
+      const symbolFilesMap = new Map<string, string>(); // relativePath -> absolutePath
+      for (const symbol of snapshot.symbols) {
+        if (symbol.file && !symbolFilesMap.has(symbol.file)) {
+          const absPath = (symbol as any).absolutePath;
+          symbolFilesMap.set(symbol.file, absPath || '');
+        }
+      }
+
+      for (const [relativePath, absolutePath] of symbolFilesMap) {
+        if (
+          !snapshot.files.some((f) => f.path === relativePath) &&
+          this.estimateTokens(snapshot) < this.tokenLimit * 0.8
+        ) {
+          try {
+            // Try absolutePath first (for workspace mode), then fall back to relative
+            if (process.env.CV_DEBUG) {
+              console.log(`[ContextManager] Loading file: rel=${relativePath}, abs=${absolutePath || 'none'}`);
+            }
+            const fileContext = absolutePath
+              ? await this.loadFileAbsolute(absolutePath, relativePath, 'graph')
+              : await this.loadFile(relativePath, 'graph');
+            snapshot.files.push(fileContext);
+            if (process.env.CV_DEBUG) {
+              console.log(`[ContextManager] Loaded file for symbol: ${fileContext.path}`);
+            }
+          } catch (err: any) {
+            // File not found, skip
+            if (process.env.CV_DEBUG) {
+              console.log(`[ContextManager] Could not load file: ${relativePath} (abs: ${absolutePath}) - ${err.message}`);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      // Graph search failed, log if debug mode
+      if (process.env.CV_DEBUG) {
+        console.error(`[ContextManager] Graph search failed: ${error.message}`);
+      }
     }
   }
 
@@ -411,7 +521,7 @@ export class ContextManager {
    * Higher centrality = more important in the codebase
    */
   private async calculateCentrality(symbolName: string): Promise<number> {
-    if (!this.graph) return 0;
+    if (!this.graph || !this.graph.isConnected()) return 0;
 
     try {
       // Query for in-degree and out-degree

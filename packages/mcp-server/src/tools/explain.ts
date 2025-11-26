@@ -50,7 +50,7 @@ export async function handleExplain(args: ExplainArgs): Promise<ToolResult> {
     const ai = createAIManager(
       {
         provider: 'anthropic',
-        model: config.ai.model || 'claude-3-5-sonnet-20241022',
+        model: config.ai.model || 'claude-sonnet-4-5-20250514',
         apiKey: anthropicApiKey,
         maxTokens: config.ai.maxTokens,
         temperature: config.ai.temperature,
