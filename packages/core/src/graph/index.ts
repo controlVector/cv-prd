@@ -201,8 +201,14 @@ export class GraphManager {
         for (const [key, value] of Object.entries(params)) {
           const placeholder = `$${key}`;
           const escapedValue = this.escapeValue(value);
-          processedQuery = processedQuery.replace(new RegExp(`\\${placeholder}`, 'g'), escapedValue);
+          // Use split/join for reliable replacement (avoids regex special chars issues)
+          processedQuery = processedQuery.split(placeholder).join(escapedValue);
         }
+      }
+
+      // Debug logging when CV_DEBUG is set
+      if (process.env.CV_DEBUG === '1') {
+        console.log('[GraphManager] Processed query:', processedQuery.substring(0, 500));
       }
 
       // Execute query using GRAPH.QUERY
@@ -216,19 +222,29 @@ export class GraphManager {
       return this.parseQueryResult(result as any);
 
     } catch (error: any) {
-      throw new GraphError(`Query failed: ${error.message}\nQuery: ${cypher}`, error);
+      // Include more context in error for debugging
+      const errorQuery = process.env.CV_DEBUG === '1' ? cypher : cypher.substring(0, 200);
+      throw new GraphError(`Query failed: ${error.message}\nQuery: ${errorQuery}`, error);
     }
   }
 
   /**
    * Escape value for Cypher query
+   * FalkorDB requires proper escaping of special characters in strings
    */
   private escapeValue(value: any): string {
     if (value === null || value === undefined) {
       return 'null';
     }
     if (typeof value === 'string') {
-      return `'${value.replace(/'/g, "\\'")}'`;
+      // Escape backslashes first, then other special characters
+      const escaped = value
+        .replace(/\\/g, '\\\\')     // Backslashes
+        .replace(/'/g, "\\'")       // Single quotes
+        .replace(/\n/g, '\\n')      // Newlines
+        .replace(/\r/g, '\\r')      // Carriage returns
+        .replace(/\t/g, '\\t');     // Tabs
+      return `'${escaped}'`;
     }
     if (typeof value === 'number' || typeof value === 'boolean') {
       return String(value);
@@ -376,19 +392,21 @@ export class GraphManager {
    * Get specific label for symbol kind (FalkorDB pattern)
    */
   private getSpecificLabel(kind: string): string {
+    // Note: Avoid reserved keywords in FalkorDB
+    // 'Variable' is reserved, so we use 'Var' instead
     const labelMap: Record<string, string> = {
       'function': 'Function',
       'method': 'Function',  // Methods are functions
       'class': 'Class',
       'interface': 'Interface',
-      'type': 'Type',
+      'type': 'TypeDef',     // 'Type' might be reserved
       'struct': 'Struct',
       'enum': 'Enum',
-      'constant': 'Constant',
-      'variable': 'Variable'
+      'constant': 'Const',
+      'variable': 'Var'      // 'Variable' is reserved
     };
 
-    return labelMap[kind] || 'Symbol';
+    return labelMap[kind] || 'CodeSymbol';  // 'Symbol' might also conflict
   }
 
   /**

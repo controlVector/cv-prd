@@ -36,6 +36,13 @@
   - Handle edge cases in SEARCH/REPLACE block parsing
   - Better error messages when edits fail to apply
 
+## Completed in v0.3.2
+
+- [x] **User Preferences System** - Pick preferred git platform, AI provider, and embedding provider during init
+- [x] `cv preferences` command to view/update preferences
+- [x] Targeted auth setup - only asks for API keys for services the user selected
+- [x] Preference-aware `cv auth setup` - uses saved preferences to determine which services to configure
+
 ## Completed in v0.3.1
 
 - [x] `cv code` command with graph-based context

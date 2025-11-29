@@ -22,6 +22,8 @@ import { GitHubAdapter, GitLabAdapter, BitbucketAdapter } from '@cv-git/platform
 import { randomBytes } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getPreferences } from '../config.js';
+import { getRequiredServices } from '../utils/preference-picker.js';
 
 const execAsync = promisify(exec);
 
@@ -70,8 +72,10 @@ export function authCommand(): Command {
       'Set up authentication (services: github, gitlab, bitbucket, anthropic, openai, openrouter, all)'
     )
     .option('--no-browser', 'Do not open browser automatically')
-    .action(async (service?: string, cmdOptions?: { browser?: boolean }) => {
+    .option('--all', 'Set up all services (ignore preferences)')
+    .action(async (service?: string, cmdOptions?: { browser?: boolean; all?: boolean }) => {
       const autoBrowser = cmdOptions?.browser !== false;
+      const forceAll = cmdOptions?.all === true;
       console.log(chalk.bold.blue('\n🔐 CV-Git Authentication Setup\n'));
 
       const credentials = new CredentialManager();
@@ -93,31 +97,62 @@ export function authCommand(): Command {
 
       console.log();
 
-      // Setup services
-      const setupAll = !service || service === 'all';
+      // Determine which services to set up
+      let servicesToSetup: string[] = [];
 
-      if (setupAll || service === 'github') {
-        await setupGitHub(credentials, autoBrowser);
+      if (service === 'all' || forceAll) {
+        // Explicitly asked for all services
+        servicesToSetup = ['github', 'gitlab', 'bitbucket', 'anthropic', 'openai', 'openrouter'];
+      } else if (service) {
+        // Specific service requested
+        servicesToSetup = [service];
+      } else {
+        // No service specified - check preferences
+        const prefsManager = getPreferences();
+        const hasPrefs = await prefsManager.exists();
+
+        if (hasPrefs) {
+          const prefs = await prefsManager.load();
+          servicesToSetup = getRequiredServices({
+            gitPlatform: prefs.gitPlatform,
+            aiProvider: prefs.aiProvider,
+            embeddingProvider: prefs.embeddingProvider,
+          });
+          console.log(chalk.gray('Setting up services based on your preferences...'));
+          console.log(chalk.gray(`Services: ${servicesToSetup.join(', ')}`));
+          console.log();
+        } else {
+          // No preferences - set up all
+          console.log(chalk.gray('No preferences found. Run "cv init" first or use "cv auth setup --all".'));
+          console.log();
+          servicesToSetup = ['github', 'gitlab', 'bitbucket', 'anthropic', 'openai', 'openrouter'];
+        }
       }
 
-      if (setupAll || service === 'gitlab') {
-        await setupGitLab(credentials, autoBrowser);
-      }
-
-      if (setupAll || service === 'bitbucket') {
-        await setupBitbucket(credentials, autoBrowser);
-      }
-
-      if (setupAll || service === 'anthropic') {
-        await setupAnthropic(credentials, autoBrowser);
-      }
-
-      if (setupAll || service === 'openai') {
-        await setupOpenAI(credentials, autoBrowser);
-      }
-
-      if (setupAll || service === 'openrouter') {
-        await setupOpenRouter(credentials, autoBrowser);
+      // Set up each service
+      for (const svc of servicesToSetup) {
+        switch (svc) {
+          case 'github':
+            await setupGitHub(credentials, autoBrowser);
+            break;
+          case 'gitlab':
+            await setupGitLab(credentials, autoBrowser);
+            break;
+          case 'bitbucket':
+            await setupBitbucket(credentials, autoBrowser);
+            break;
+          case 'anthropic':
+            await setupAnthropic(credentials, autoBrowser);
+            break;
+          case 'openai':
+            await setupOpenAI(credentials, autoBrowser);
+            break;
+          case 'openrouter':
+            await setupOpenRouter(credentials, autoBrowser);
+            break;
+          default:
+            console.log(chalk.yellow(`Unknown service: ${svc}`));
+        }
       }
 
       console.log(chalk.bold.green('\n✅ Authentication setup complete!\n'));

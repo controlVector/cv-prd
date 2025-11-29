@@ -44,7 +44,10 @@ export class SyncEngine {
       console.log(`Found ${allFiles.length} tracked files`);
 
       // 2. Filter files to sync
-      const excludePatterns = options.excludePatterns || this.getDefaultExcludePatterns();
+      // Always include critical patterns (merge with any custom patterns)
+      const defaultPatterns = this.getDefaultExcludePatterns();
+      const customPatterns = options.excludePatterns || [];
+      const excludePatterns = [...new Set([...defaultPatterns, ...customPatterns])];
       const includeLanguages = options.includeLanguages || this.getDefaultIncludeLanguages();
 
       const filesToSync = allFiles.filter(f =>
@@ -146,7 +149,10 @@ export class SyncEngine {
 
     try {
       // Filter files to sync
-      const excludePatterns = options.excludePatterns || this.getDefaultExcludePatterns();
+      // Always include critical patterns (merge with any custom patterns)
+      const defaultPatterns = this.getDefaultExcludePatterns();
+      const customPatterns = options.excludePatterns || [];
+      const excludePatterns = [...new Set([...defaultPatterns, ...customPatterns])];
       const includeLanguages = options.includeLanguages || this.getDefaultIncludeLanguages();
 
       const filesToSync = changedFiles.filter(f =>
@@ -538,22 +544,52 @@ export class SyncEngine {
    */
   private getDefaultExcludePatterns(): string[] {
     return [
+      // JavaScript/Node
       'node_modules/**',
-      '.git/**',
+      '.next/**',
+      '.nuxt/**',
+      '*.min.js',
+      '*.bundle.js',
+
+      // Python virtualenvs
+      'venv/**',
+      '.venv/**',
+      'env/**',
+      '.env/**',
+      '**/lib/python*/**',        // Matches admin/lib/python3.10/...
+      '**/site-packages/**',
+      '__pycache__/**',
+      '*.pyc',
+      '.pytest_cache/**',
+      '*.egg-info/**',
+
+      // Build outputs
       'dist/**',
       'build/**',
+      'out/**',
+      'target/**',
+      '.build/**',
+
+      // Test files
       '*.test.ts',
       '*.test.js',
       '*.spec.ts',
       '*.spec.js',
       'coverage/**',
-      '.next/**',
+
+      // Version control & cache
+      '.git/**',
       '.cache/**',
-      '__pycache__/**',
-      '*.pyc',
-      'venv/**',
-      'target/**',
-      '*.min.js'
+      '.tmp/**',
+      'tmp/**',
+
+      // IDE/Editor
+      '.idea/**',
+      '.vscode/**',
+
+      // Vendor directories
+      'vendor/**',
+      'third_party/**',
     ];
   }
 

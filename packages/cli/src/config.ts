@@ -54,6 +54,24 @@ export interface FeaturesConfig {
   autoMerge: boolean;
 }
 
+/**
+ * User Preferences - stored separately from config
+ * These are the user's preferred choices for interfaces/providers
+ */
+export type AIProvider = 'anthropic' | 'openai' | 'openrouter';
+export type EmbeddingProvider = 'openai' | 'openrouter';
+export type GitPlatformType = 'github' | 'gitlab' | 'bitbucket';
+
+export interface UserPreferences {
+  version: string;
+  gitPlatform: GitPlatformType;
+  aiProvider: AIProvider;
+  embeddingProvider: EmbeddingProvider;
+  setupComplete: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const DEFAULT_CONFIG: CVGitConfig = {
   version: '0.2.0',
   platform: {
@@ -239,4 +257,146 @@ export function getConfig(): ConfigManager {
     globalConfig = new ConfigManager();
   }
   return globalConfig;
+}
+
+// ============================================================================
+// Preferences Manager
+// ============================================================================
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  version: '1.0.0',
+  gitPlatform: 'github',
+  aiProvider: 'anthropic',
+  embeddingProvider: 'openrouter',
+  setupComplete: false,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+export class PreferencesManager {
+  private prefsPath: string;
+  private preferences: UserPreferences | null = null;
+
+  constructor(prefsPath?: string) {
+    this.prefsPath =
+      prefsPath || path.join(os.homedir(), '.cv', 'preferences.json');
+  }
+
+  /**
+   * Load preferences from file
+   */
+  async load(): Promise<UserPreferences> {
+    if (this.preferences) return this.preferences;
+
+    try {
+      const data = await fs.readFile(this.prefsPath, 'utf8');
+      this.preferences = JSON.parse(data);
+      return this.preferences!;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        // Prefs don't exist yet
+        return { ...DEFAULT_PREFERENCES };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Save preferences to file
+   */
+  async save(prefs: UserPreferences): Promise<void> {
+    this.preferences = {
+      ...prefs,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const dir = path.dirname(this.prefsPath);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(this.prefsPath, JSON.stringify(this.preferences, null, 2), {
+      mode: 0o600,
+    });
+  }
+
+  /**
+   * Check if preferences exist
+   */
+  async exists(): Promise<boolean> {
+    try {
+      await fs.access(this.prefsPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Initialize preferences with user choices
+   */
+  async init(choices: {
+    gitPlatform: GitPlatformType;
+    aiProvider: AIProvider;
+    embeddingProvider: EmbeddingProvider;
+  }): Promise<UserPreferences> {
+    const prefs: UserPreferences = {
+      ...DEFAULT_PREFERENCES,
+      ...choices,
+      setupComplete: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await this.save(prefs);
+    return prefs;
+  }
+
+  /**
+   * Update a single preference
+   */
+  async set<K extends keyof UserPreferences>(
+    key: K,
+    value: UserPreferences[K]
+  ): Promise<void> {
+    const prefs = await this.load();
+    prefs[key] = value;
+    await this.save(prefs);
+  }
+
+  /**
+   * Get a single preference
+   */
+  async get<K extends keyof UserPreferences>(key: K): Promise<UserPreferences[K]> {
+    const prefs = await this.load();
+    return prefs[key];
+  }
+
+  /**
+   * Reset to defaults
+   */
+  async reset(): Promise<UserPreferences> {
+    this.preferences = {
+      ...DEFAULT_PREFERENCES,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await this.save(this.preferences);
+    return this.preferences;
+  }
+
+  /**
+   * Get preferences file path
+   */
+  getPath(): string {
+    return this.prefsPath;
+  }
+}
+
+/**
+ * Get global preferences instance
+ */
+let globalPreferences: PreferencesManager | null = null;
+
+export function getPreferences(): PreferencesManager {
+  if (!globalPreferences) {
+    globalPreferences = new PreferencesManager();
+  }
+  return globalPreferences;
 }

@@ -29,6 +29,7 @@ import { pushCommand } from './commands/push.js';
 import { hooksCommand } from './commands/hooks.js';
 import { designCommand } from './commands/design.js';
 import { codeCommand } from './commands/code.js';
+import { preferencesCommand } from './commands/preferences.js';
 
 const program = new Command();
 
@@ -39,6 +40,7 @@ program
 
 // Add commands
 program.addCommand(configCommand());        // Configuration management
+program.addCommand(preferencesCommand());   // User preferences
 program.addCommand(statusCommand());        // Status and information
 program.addCommand(doctorCommand());        // Health diagnostics
 program.addCommand(authCommand());          // Credential management

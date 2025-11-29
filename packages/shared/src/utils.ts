@@ -144,16 +144,37 @@ export function shouldSyncFile(
 }
 
 /**
- * Simple glob pattern matching
+ * Glob pattern matching with proper ** support
+ * - * matches anything except /
+ * - ** matches anything including /
+ * - ? matches single character
  */
 function matchGlob(str: string, pattern: string): boolean {
-  const regexPattern = pattern
-    .replace(/\./g, '\\.')
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
+  // Normalize path separators
+  const normalizedStr = str.replace(/\\/g, '/');
+  const normalizedPattern = pattern.replace(/\\/g, '/');
 
-  const regex = new RegExp(`^${regexPattern}$`);
-  return regex.test(str);
+  // Convert glob pattern to regex
+  let regexPattern = normalizedPattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars (except * and ?)
+    .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temporarily replace **
+    .replace(/\*/g, '[^/]*')                // * matches anything except /
+    .replace(/\?/g, '[^/]')                 // ? matches single char except /
+    .replace(/{{GLOBSTAR}}/g, '.*');        // ** matches anything including /
+
+  // Pattern can match anywhere in the path if it starts with **/
+  // or match from start otherwise
+  if (!normalizedPattern.startsWith('**/') && !normalizedPattern.startsWith('**\\')) {
+    regexPattern = '^' + regexPattern;
+  }
+
+  // Pattern must match to end if it doesn't end with **
+  if (!normalizedPattern.endsWith('**')) {
+    regexPattern = regexPattern + '$';
+  }
+
+  const regex = new RegExp(regexPattern);
+  return regex.test(normalizedStr);
 }
 
 /**

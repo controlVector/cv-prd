@@ -241,9 +241,11 @@ export function syncCommand(): Command {
 
           spinner.stop(); // Stop spinner so sync engine can log progress
 
+          // Pass config patterns if defined, otherwise let sync engine use defaults
+          // undefined means "use defaults", empty array means "exclude nothing"
           const syncState = await syncEngine.fullSync({
-            excludePatterns: config.sync.excludePatterns,
-            includeLanguages: config.sync.includeLanguages
+            excludePatterns: config.sync?.excludePatterns?.length ? config.sync.excludePatterns : undefined,
+            includeLanguages: config.sync?.includeLanguages?.length ? config.sync.includeLanguages : undefined
           });
 
           console.log(); // Newline after sync logs

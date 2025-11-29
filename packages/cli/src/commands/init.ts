@@ -20,6 +20,15 @@ import {
 } from '@cv-git/shared';
 import { CredentialManager } from '@cv-git/credentials';
 import { addGlobalOptions, createOutput } from '../utils/output.js';
+import { getPreferences } from '../config.js';
+import {
+  runPreferencePicker,
+  displayPreferenceSummary,
+  savePreferences,
+  getRequiredServices,
+  displayRequiredKeys,
+  PreferenceChoices,
+} from '../utils/preference-picker.js';
 
 export function initCommand(): Command {
   const cmd = new Command('init');
@@ -28,17 +37,69 @@ export function initCommand(): Command {
     .description('Initialize CV-Git in the current repository or workspace')
     .option('--name <name>', 'Repository/workspace name (defaults to directory name)')
     .option('--workspace', 'Force workspace mode (multi-repo)')
-    .option('--repo', 'Force single-repo mode');
+    .option('--repo', 'Force single-repo mode')
+    .option('--skip-preferences', 'Skip preference picker (for developers testing all providers)');
 
   addGlobalOptions(cmd);
 
   cmd.action(async (options) => {
       const output = createOutput(options);
-      const spinner = output.spinner('Detecting project type...').start();
 
       try {
         const currentDir = process.cwd();
         const projectName = options.name || path.basename(currentDir);
+        const prefsManager = getPreferences();
+
+        // Check if preferences already exist (returning user)
+        const hasPrefs = await prefsManager.exists();
+        let preferences: PreferenceChoices;
+        const skipPrefs = options.skipPreferences === true;
+
+        if (skipPrefs) {
+          // Developer mode - skip preferences entirely
+          console.log(chalk.gray('Skipping preferences (developer mode)'));
+          console.log();
+          preferences = {
+            gitPlatform: 'github',
+            aiProvider: 'anthropic',
+            embeddingProvider: 'openrouter',
+          };
+        } else if (!hasPrefs && !output.isJson) {
+          // First-time setup - run preference picker
+          preferences = await runPreferencePicker();
+          displayPreferenceSummary(preferences);
+
+          // Confirm preferences
+          const { confirmPrefs } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'confirmPrefs',
+              message: 'Continue with these preferences?',
+              default: true,
+            },
+          ]);
+
+          if (!confirmPrefs) {
+            // Let them re-pick
+            preferences = await runPreferencePicker(preferences);
+            displayPreferenceSummary(preferences);
+          }
+
+          // Save preferences
+          await savePreferences(preferences);
+          console.log(chalk.green('Preferences saved!'));
+          console.log();
+        } else {
+          // Load existing preferences
+          const existingPrefs = await prefsManager.load();
+          preferences = {
+            gitPlatform: existingPrefs.gitPlatform,
+            aiProvider: existingPrefs.aiProvider,
+            embeddingProvider: existingPrefs.embeddingProvider,
+          };
+        }
+
+        const spinner = output.spinner('Detecting project type...').start();
 
         // Detect project type
         const detected = await detectProjectType(currentDir);
@@ -124,55 +185,70 @@ export function initCommand(): Command {
         spinner.succeed(`CV-Git ${mode === 'workspace' ? 'workspace' : 'repository'} initialized successfully!`);
 
         if (output.isJson) {
-          output.json({ success: true, name: projectName, cvDir, mode });
+          output.json({ success: true, name: projectName, cvDir, mode, preferences });
         } else {
           console.log();
 
-          // Prompt to set up credentials
-          const { setupCreds } = await inquirer.prompt([
-            {
-              type: 'confirm',
-              name: 'setupCreds',
-              message: 'Would you like to set up API keys now?',
-              default: true,
-            },
-          ]);
+          // Check which global credentials exist for the selected preferences
+          const requiredServices = getRequiredServices(preferences);
+          const credentialStatus = await checkGlobalCredentials(requiredServices);
 
-          if (setupCreds) {
-            console.log();
-            console.log(chalk.cyan('Running: cv auth setup'));
-            console.log();
-
-            // Initialize credential manager and run setup
-            const credentials = new CredentialManager();
-            await credentials.init();
-
-            // Import and run auth setup dynamically to avoid circular deps
-            const { execSync } = await import('child_process');
-            try {
-              execSync('cv auth setup', { stdio: 'inherit' });
-            } catch {
-              console.log(chalk.yellow('\nYou can run `cv auth setup` later to configure API keys.'));
+          if (credentialStatus.configured.length > 0) {
+            console.log(chalk.bold('Using credentials:'));
+            for (const svc of credentialStatus.configured) {
+              console.log(chalk.green(`  ✓ ${svc}`));
             }
-          } else {
-            console.log();
-            console.log(chalk.bold('Next steps:'));
-            console.log(chalk.gray('  1. Set up your API keys:'));
-            console.log(chalk.cyan('     cv auth setup'));
             console.log();
           }
 
-          console.log(chalk.gray('  2. Sync your repository:'));
+          if (credentialStatus.missing.length > 0) {
+            console.log(chalk.bold('Missing credentials:'));
+            for (const svc of credentialStatus.missing) {
+              console.log(chalk.yellow(`  • ${svc}`));
+            }
+            console.log();
+
+            const { setupMissing } = await inquirer.prompt([
+              {
+                type: 'confirm',
+                name: 'setupMissing',
+                message: 'Set up missing credentials now?',
+                default: true,
+              },
+            ]);
+
+            if (setupMissing) {
+              console.log();
+              for (const service of credentialStatus.missing) {
+                const { execSync } = await import('child_process');
+                try {
+                  execSync(`cv auth setup ${service}`, { stdio: 'inherit' });
+                } catch {
+                  console.log(chalk.yellow(`Skipped ${service}. Run 'cv auth setup ${service}' later.`));
+                }
+              }
+            }
+          }
+
+          console.log();
+          console.log(chalk.bold('Next steps:'));
+          if (credentialStatus.missing.length > 0) {
+            console.log(chalk.gray('  1. Set up missing credentials:'));
+            console.log(chalk.cyan('     cv auth setup'));
+            console.log();
+            console.log(chalk.gray('  2. Sync your repository:'));
+          } else {
+            console.log(chalk.gray('  1. Sync your repository:'));
+          }
           console.log(chalk.cyan('     cv sync'));
           console.log();
-          console.log(chalk.gray('  3. Start using CV-Git:'));
+          console.log(chalk.gray('  Then start using CV-Git:'));
           console.log(chalk.cyan('     cv find "authentication logic"'));
-          console.log(chalk.cyan('     cv do "add logging to error handlers"'));
+          console.log(chalk.cyan('     cv code "add logging to error handlers"'));
           console.log();
         }
 
       } catch (error: any) {
-        spinner.fail('Failed to initialize CV-Git');
         output.error('Failed to initialize CV-Git', error);
         process.exit(1);
       }
@@ -220,4 +296,54 @@ async function initWorkspace(
   // Also create a minimal config.json for compatibility
   spinner.text = 'Creating configuration...';
   await configManager.init(workspaceRoot, workspaceName);
+}
+
+/**
+ * Check which global credentials are already configured
+ */
+async function checkGlobalCredentials(services: string[]): Promise<{
+  configured: string[];
+  missing: string[];
+}> {
+  const credentials = new CredentialManager();
+  await credentials.init();
+
+  const configured: string[] = [];
+  const missing: string[] = [];
+
+  for (const service of services) {
+    let hasCredential = false;
+    try {
+      switch (service) {
+        case 'github':
+          hasCredential = !!(await credentials.getGitPlatformToken('github' as any));
+          break;
+        case 'gitlab':
+          hasCredential = !!(await credentials.getGitPlatformToken('gitlab' as any));
+          break;
+        case 'bitbucket':
+          hasCredential = !!(await credentials.getGitPlatformToken('bitbucket' as any));
+          break;
+        case 'anthropic':
+          hasCredential = !!(await credentials.getAnthropicKey());
+          break;
+        case 'openai':
+          hasCredential = !!(await credentials.getOpenAIKey());
+          break;
+        case 'openrouter':
+          hasCredential = !!(await credentials.getOpenRouterKey());
+          break;
+      }
+    } catch {
+      hasCredential = false;
+    }
+
+    if (hasCredential) {
+      configured.push(service);
+    } else {
+      missing.push(service);
+    }
+  }
+
+  return { configured, missing };
 }

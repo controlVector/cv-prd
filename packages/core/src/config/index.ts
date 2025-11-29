@@ -54,17 +54,52 @@ const DEFAULT_CONFIG: CVConfig = {
     autoSync: true,
     syncOnCommit: true,
     excludePatterns: [
+      // JavaScript/Node
       'node_modules/**',
-      '.git/**',
+      '.next/**',
+      '.nuxt/**',
+      '*.min.js',
+      '*.bundle.js',
+
+      // Python virtualenvs
+      'venv/**',
+      '.venv/**',
+      'env/**',
+      '.env/**',
+      '**/lib/python*/**',
+      '**/site-packages/**',
+      '__pycache__/**',
+      '*.pyc',
+      '.pytest_cache/**',
+      '*.egg-info/**',
+
+      // Build outputs
       'dist/**',
       'build/**',
+      'out/**',
+      'target/**',
+      '.build/**',
+
+      // Test files
       '*.test.ts',
       '*.test.js',
       '*.spec.ts',
       '*.spec.js',
       'coverage/**',
-      '.next/**',
-      '.cache/**'
+
+      // Version control & cache
+      '.git/**',
+      '.cache/**',
+      '.tmp/**',
+      'tmp/**',
+
+      // IDE/Editor
+      '.idea/**',
+      '.vscode/**',
+
+      // Vendor directories
+      'vendor/**',
+      'third_party/**',
     ],
     includeLanguages: ['typescript', 'javascript', 'python', 'go', 'rust']
   },
