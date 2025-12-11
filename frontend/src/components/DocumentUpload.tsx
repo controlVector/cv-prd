@@ -13,11 +13,13 @@ export function DocumentUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const allowedExtensions = ['.docx', '.md', '.markdown']
-  const allowedTypes = [
+  // MIME types for validation (currently only extension-based validation is used)
+  const _allowedTypes = [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'text/markdown',
     'text/plain', // Some systems use text/plain for .md files
   ]
+  void _allowedTypes // Suppress unused variable warning
 
   const validateFile = (file: File): boolean => {
     const fileExt = '.' + file.name.split('.').pop()?.toLowerCase()

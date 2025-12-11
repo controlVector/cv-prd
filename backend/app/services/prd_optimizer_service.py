@@ -281,23 +281,16 @@ class PRDOptimizerService:
 
         # Update in graph (if available)
         if self.graph_service:
-            # Delete old node and create new one
-            # (Neo4j doesn't have a simple update, so we recreate)
             try:
-                with self.graph_service.driver.session() as session:
-                    session.run(
-                        """
-                        MATCH (c:Chunk {id: $chunk_id})
-                        SET c.text = $text,
-                            c.type = $type,
-                            c.priority = $priority,
-                            c.optimized = true
-                        """,
-                        chunk_id=chunk_id,
-                        text=optimized_text,
-                        type=chunk_type,
-                        priority=priority,
-                    )
+                self.graph_service.update_chunk_node(
+                    chunk_id=chunk_id,
+                    updates={
+                        "text": optimized_text,
+                        "type": chunk_type,
+                        "priority": priority,
+                        "optimized": True,
+                    },
+                )
             except Exception as e:
                 logger.error(f"Error updating graph node: {e}")
 

@@ -1,4 +1,11 @@
-from neo4j import GraphDatabase
+"""
+FalkorDB Graph Service for cv-prd
+
+Manages the PRD knowledge graph using FalkorDB (Redis-based graph database).
+Compatible with cv-git's graph infrastructure for future integration.
+"""
+
+import redis
 from typing import List, Dict, Any, Optional
 import logging
 
@@ -6,86 +13,217 @@ logger = logging.getLogger(__name__)
 
 
 class GraphService:
-    """Service for managing knowledge graph in Neo4j"""
+    """Service for managing knowledge graph in FalkorDB"""
 
-    def __init__(self, uri: str, user: str, password: str):
-        logger.info(f"Connecting to Neo4j at {uri}")
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
-        self._ensure_constraints()
-
-    def close(self):
-        """Close the database connection"""
-        self.driver.close()
-
-    def _ensure_constraints(self):
-        """Create necessary constraints and indexes"""
-        with self.driver.session() as session:
-            # Create unique constraints
-            session.run(
-                """
-                CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS
-                FOR (c:Chunk) REQUIRE c.id IS UNIQUE
-            """
-            )
-
-            session.run(
-                """
-                CREATE CONSTRAINT prd_id_unique IF NOT EXISTS
-                FOR (p:PRD) REQUIRE p.id IS UNIQUE
-            """
-            )
-
-            # Create indexes
-            session.run(
-                """
-                CREATE INDEX chunk_type_idx IF NOT EXISTS
-                FOR (c:Chunk) ON (c.type)
-            """
-            )
-
-            logger.info("Neo4j constraints and indexes created")
-
-    def create_prd_node(self, prd_id: str, prd_data: Dict[str, Any]) -> None:
+    def __init__(self, url: str = "redis://localhost:6379", database: str = "cvprd"):
         """
-        Create a PRD node
+        Initialize FalkorDB connection.
 
         Args:
-            prd_id: Unique identifier for the PRD
-            prd_data: PRD metadata
+            url: Redis URL (e.g., redis://localhost:6379)
+            database: Graph name (default: cvprd)
         """
-        with self.driver.session() as session:
-            session.execute_write(self._create_prd_tx, prd_id, prd_data)
-        logger.info(f"Created PRD node: {prd_id}")
+        logger.info(f"Connecting to FalkorDB at {url}")
+        self.url = url
+        self.graph_name = database
+        self.client: Optional[redis.Redis] = None
+        self._connect()
+        self._ensure_indexes()
 
-    @staticmethod
-    def _create_prd_tx(tx, prd_id: str, data: Dict[str, Any]):
+    def _connect(self) -> None:
+        """Establish connection to FalkorDB via Redis."""
+        try:
+            self.client = redis.from_url(self.url, decode_responses=True)
+            # Test connection
+            self.client.ping()
+            logger.info(f"Connected to FalkorDB, graph: {self.graph_name}")
+        except Exception as e:
+            logger.error(f"Failed to connect to FalkorDB: {e}")
+            raise
+
+    def close(self) -> None:
+        """Close the database connection."""
+        if self.client:
+            self.client.close()
+            self.client = None
+            logger.info("FalkorDB connection closed")
+
+    def _ensure_indexes(self) -> None:
+        """Create indexes for better query performance."""
+        try:
+            # Index on Chunk.id
+            self._safe_create_index("Chunk", "id")
+            # Index on Chunk.type
+            self._safe_create_index("Chunk", "type")
+            # Index on PRD.id
+            self._safe_create_index("PRD", "id")
+            logger.info("FalkorDB indexes created")
+        except Exception as e:
+            logger.warning(f"Index creation warning: {e}")
+
+    def _safe_create_index(self, label: str, property: str) -> None:
+        """Create index if it doesn't exist."""
+        try:
+            self._query(f"CREATE INDEX FOR (n:{label}) ON (n.{property})")
+        except Exception as e:
+            # Index might already exist - this is fine
+            error_msg = str(e).lower()
+            if "already indexed" in error_msg or "already exists" in error_msg:
+                pass  # Silently ignore - index exists
+            else:
+                raise
+
+    def _query(self, cypher: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Execute a Cypher query against FalkorDB.
+
+        Args:
+            cypher: Cypher query string
+            params: Query parameters
+
+        Returns:
+            List of result dictionaries
+        """
+        if not self.client:
+            raise RuntimeError("Not connected to FalkorDB")
+
+        # Replace parameters in query (FalkorDB style)
+        processed_query = cypher
+        if params:
+            for key, value in params.items():
+                placeholder = f"${key}"
+                escaped_value = self._escape_value(value)
+                processed_query = processed_query.replace(placeholder, escaped_value)
+
+        try:
+            # Execute using GRAPH.QUERY command
+            result = self.client.execute_command(
+                "GRAPH.QUERY",
+                self.graph_name,
+                processed_query,
+                "--compact"
+            )
+            return self._parse_result(result)
+        except Exception as e:
+            logger.error(f"Query failed: {e}\nQuery: {cypher[:200]}")
+            raise
+
+    def _escape_value(self, value: Any) -> str:
+        """Escape value for Cypher query."""
+        if value is None:
+            return "null"
+        if isinstance(value, str):
+            # Escape special characters
+            escaped = (
+                value
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+            )
+            return f"'{escaped}'"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, list):
+            return f"[{', '.join(self._escape_value(v) for v in value)}]"
+        if isinstance(value, dict):
+            props = ", ".join(f"{k}: {self._escape_value(v)}" for k, v in value.items())
+            return f"{{{props}}}"
+        return str(value)
+
+    def _parse_result(self, result: Any) -> List[Dict[str, Any]]:
+        """
+        Parse FalkorDB query result.
+
+        FalkorDB returns: [headers, rows, statistics]
+        - headers: [[type, name], [type, name], ...]
+        - rows: [[[type, value], [type, value], ...], ...]
+        """
+        if not result or not isinstance(result, list) or len(result) < 2:
+            return []
+
+        headers_raw = result[0]
+        rows_raw = result[1]
+
+        if not isinstance(headers_raw, list) or not isinstance(rows_raw, list):
+            return []
+
+        # Extract column names from headers
+        headers = [h[1] if isinstance(h, list) and len(h) > 1 else str(h) for h in headers_raw]
+
+        # Parse rows
+        parsed = []
+        for row in rows_raw:
+            if not isinstance(row, list):
+                continue
+            obj = {}
+            for idx, cell in enumerate(row):
+                if idx < len(headers):
+                    # cell is [type, value] in compact format
+                    if isinstance(cell, list) and len(cell) >= 2:
+                        obj[headers[idx]] = self._parse_cell_value(cell)
+                    else:
+                        obj[headers[idx]] = cell
+            parsed.append(obj)
+
+        return parsed
+
+    def _parse_cell_value(self, cell: List) -> Any:
+        """Parse a cell value from FalkorDB compact format."""
+        if not isinstance(cell, list) or len(cell) < 2:
+            return cell
+
+        cell_type = cell[0]
+        cell_value = cell[1]
+
+        # Type codes from FalkorDB:
+        # 1 = NULL, 2 = STRING, 3 = INTEGER, 4 = BOOLEAN, 5 = DOUBLE
+        # 6 = ARRAY, 7 = EDGE, 8 = NODE, 9 = PATH
+        if cell_type == 1:  # NULL
+            return None
+        elif cell_type == 6:  # ARRAY
+            return [self._parse_cell_value(v) if isinstance(v, list) else v for v in cell_value]
+        elif cell_type == 7:  # EDGE - return properties
+            # Edge format: [id, type, src, dest, properties]
+            if isinstance(cell_value, list) and len(cell_value) >= 5:
+                return cell_value[4] if len(cell_value) > 4 else {}
+            return cell_value
+        elif cell_type == 8:  # NODE - return properties
+            # Node format: [id, labels, properties]
+            if isinstance(cell_value, list) and len(cell_value) >= 3:
+                return cell_value[2] if len(cell_value) > 2 else {}
+            return cell_value
+        else:
+            return cell_value
+
+    # =========================================================================
+    # PRD Operations
+    # =========================================================================
+
+    def create_prd_node(self, prd_id: str, prd_data: Dict[str, Any]) -> None:
+        """Create or update a PRD node."""
         query = """
         MERGE (p:PRD {id: $id})
         SET p.name = $name,
             p.description = $description
         RETURN p
         """
-        tx.run(
-            query,
-            id=prd_id,
-            name=data.get("name", ""),
-            description=data.get("description", ""),
-        )
+        self._query(query, {
+            "id": prd_id,
+            "name": prd_data.get("name", ""),
+            "description": prd_data.get("description", ""),
+        })
+        logger.info(f"Created PRD node: {prd_id}")
+
+    # =========================================================================
+    # Chunk Operations
+    # =========================================================================
 
     def create_chunk_node(self, chunk_id: str, chunk_data: Dict[str, Any]) -> None:
-        """
-        Create a chunk node
-
-        Args:
-            chunk_id: Unique identifier for the chunk
-            chunk_data: Chunk metadata
-        """
-        with self.driver.session() as session:
-            session.execute_write(self._create_chunk_tx, chunk_id, chunk_data)
-        logger.info(f"Created chunk node: {chunk_id}")
-
-    @staticmethod
-    def _create_chunk_tx(tx, chunk_id: str, data: Dict[str, Any]):
+        """Create or update a Chunk node."""
         query = """
         MERGE (c:Chunk {id: $id})
         SET c.type = $type,
@@ -94,29 +232,50 @@ class GraphService:
             c.context = $context
         RETURN c
         """
-        tx.run(
-            query,
-            id=chunk_id,
-            type=data.get("type", ""),
-            text=data.get("text", ""),
-            priority=data.get("priority", "medium"),
-            context=data.get("context", ""),
-        )
+        self._query(query, {
+            "id": chunk_id,
+            "type": chunk_data.get("type", ""),
+            "text": chunk_data.get("text", ""),
+            "priority": chunk_data.get("priority", "medium"),
+            "context": chunk_data.get("context", ""),
+        })
+        logger.info(f"Created chunk node: {chunk_id}")
+
+    def update_chunk_node(self, chunk_id: str, updates: Dict[str, Any]) -> None:
+        """Update an existing Chunk node."""
+        # Build SET clause dynamically
+        set_clauses = []
+        params = {"id": chunk_id}
+
+        for key, value in updates.items():
+            if key != "id":
+                set_clauses.append(f"c.{key} = ${key}")
+                params[key] = value
+
+        if not set_clauses:
+            return
+
+        query = f"""
+        MATCH (c:Chunk {{id: $id}})
+        SET {', '.join(set_clauses)}
+        RETURN c
+        """
+        self._query(query, params)
+        logger.info(f"Updated chunk node: {chunk_id}")
 
     def link_chunk_to_prd(self, chunk_id: str, prd_id: str) -> None:
-        """Create BELONGS_TO relationship between chunk and PRD"""
-        with self.driver.session() as session:
-            session.execute_write(self._link_chunk_to_prd_tx, chunk_id, prd_id)
-        logger.info(f"Linked chunk {chunk_id} to PRD {prd_id}")
-
-    @staticmethod
-    def _link_chunk_to_prd_tx(tx, chunk_id: str, prd_id: str):
+        """Create BELONGS_TO relationship between chunk and PRD."""
         query = """
         MATCH (c:Chunk {id: $chunk_id})
         MATCH (p:PRD {id: $prd_id})
         MERGE (c)-[:BELONGS_TO]->(p)
         """
-        tx.run(query, chunk_id=chunk_id, prd_id=prd_id)
+        self._query(query, {"chunk_id": chunk_id, "prd_id": prd_id})
+        logger.info(f"Linked chunk {chunk_id} to PRD {prd_id}")
+
+    # =========================================================================
+    # Relationship Operations
+    # =========================================================================
 
     def create_relationship(
         self,
@@ -125,137 +284,101 @@ class GraphService:
         rel_type: str,
         properties: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Create a relationship between two chunks
+        """Create a relationship between two chunks."""
+        # Build properties SET clause
+        props_clause = ""
+        if properties:
+            props_parts = [f"r.{k} = {self._escape_value(v)}" for k, v in properties.items()]
+            props_clause = f"SET {', '.join(props_parts)}"
 
-        Args:
-            source_id: Source chunk ID
-            target_id: Target chunk ID
-            rel_type: Type of relationship (DEPENDS_ON, REFERENCES, etc.)
-            properties: Optional properties for the relationship
-        """
-        with self.driver.session() as session:
-            session.execute_write(
-                self._create_relationship_tx,
-                source_id,
-                target_id,
-                rel_type,
-                properties or {},
-            )
-        logger.info(f"Created {rel_type} relationship: {source_id} -> {target_id}")
-
-    @staticmethod
-    def _create_relationship_tx(tx, source_id, target_id, rel_type, props):
+        # Note: FalkorDB requires the relationship type to be literal in the query
         query = f"""
         MATCH (c1:Chunk {{id: $source}})
         MATCH (c2:Chunk {{id: $target}})
         MERGE (c1)-[r:{rel_type}]->(c2)
-        SET r += $props
+        {props_clause}
         RETURN r
         """
-        tx.run(query, source=source_id, target=target_id, props=props)
+        self._query(query, {"source": source_id, "target": target_id})
+        logger.info(f"Created {rel_type} relationship: {source_id} -> {target_id}")
+
+    # =========================================================================
+    # Query Operations
+    # =========================================================================
 
     def get_dependencies(
         self, chunk_id: str, depth: int = 3, direction: str = "outgoing"
     ) -> List[Dict[str, Any]]:
-        """
-        Get dependencies of a chunk
-
-        Args:
-            chunk_id: Chunk ID to query
-            depth: Maximum depth to traverse
-            direction: 'outgoing' (dependencies) or 'incoming' (dependents)
-
-        Returns:
-            List of dependent chunks with distances
-        """
-        with self.driver.session() as session:
-            result = session.execute_read(
-                self._get_dependencies_tx, chunk_id, depth, direction
-            )
-        return result
-
-    @staticmethod
-    def _get_dependencies_tx(tx, chunk_id, depth, direction):
-        arrow = "->" if direction == "outgoing" else "<-"
-        query = f"""
-        MATCH path = (c:Chunk {{id: $chunk_id}})-[:DEPENDS_ON*1..{depth}]{arrow}(dep:Chunk)
-        RETURN dep.id as chunk_id,
-               dep.type as type,
-               dep.text as text,
-               dep.priority as priority,
-               length(path) as distance
-        ORDER BY distance
-        """
-        result = tx.run(query, chunk_id=chunk_id)
-        return [dict(record) for record in result]
+        """Get dependencies of a chunk."""
+        # FalkorDB requires different query structure for incoming vs outgoing
+        if direction == "outgoing":
+            query = f"""
+            MATCH (c:Chunk {{id: $chunk_id}})-[:DEPENDS_ON*1..{depth}]->(dep:Chunk)
+            RETURN dep.id as chunk_id,
+                   dep.type as type,
+                   dep.text as text,
+                   dep.priority as priority
+            """
+        else:
+            # For incoming dependencies (what depends on this chunk)
+            query = f"""
+            MATCH (dep:Chunk)-[:DEPENDS_ON*1..{depth}]->(c:Chunk {{id: $chunk_id}})
+            RETURN dep.id as chunk_id,
+                   dep.type as type,
+                   dep.text as text,
+                   dep.priority as priority
+            """
+        return self._query(query, {"chunk_id": chunk_id})
 
     def get_all_relationships(self, chunk_id: str) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Get all relationships for a chunk
-
-        Args:
-            chunk_id: Chunk ID to query
-
-        Returns:
-            Dictionary with relationship types as keys
-        """
-        with self.driver.session() as session:
-            result = session.execute_read(self._get_all_relationships_tx, chunk_id)
-        return result
-
-    @staticmethod
-    def _get_all_relationships_tx(tx, chunk_id):
-        query = """
-        MATCH (c:Chunk {id: $chunk_id})
-        OPTIONAL MATCH (c)-[:DEPENDS_ON]->(dep:Chunk)
-        OPTIONAL MATCH (c)-[:REFERENCES]->(ref:Chunk)
-        OPTIONAL MATCH (c)<-[:DEPENDS_ON]-(dependent:Chunk)
-        OPTIONAL MATCH (c)-[:PARENT_OF]->(child:Chunk)
-        RETURN
-            collect(DISTINCT {id: dep.id, text: dep.text, type: dep.type}) as dependencies,
-            collect(DISTINCT {id: ref.id, text: ref.text, type: ref.type}) as references,
-            collect(DISTINCT {id: dependent.id, text: dependent.text, type: dependent.type}) as dependents,
-            collect(DISTINCT {id: child.id, text: child.text, type: child.type}) as children
-        """
-        result = tx.run(query, chunk_id=chunk_id)
-        record = result.single()
-
-        if record:
-            return {
-                "dependencies": [r for r in record["dependencies"] if r["id"]],
-                "references": [r for r in record["references"] if r["id"]],
-                "dependents": [r for r in record["dependents"] if r["id"]],
-                "children": [r for r in record["children"] if r["id"]],
-            }
-        return {
+        """Get all relationships for a chunk."""
+        # FalkorDB doesn't support multiple OPTIONAL MATCH with different directions well
+        # Query each relationship type separately
+        result = {
             "dependencies": [],
             "references": [],
             "dependents": [],
             "children": [],
         }
 
+        # Outgoing DEPENDS_ON (what this chunk depends on)
+        deps_query = """
+        MATCH (c:Chunk {id: $chunk_id})-[:DEPENDS_ON]->(dep:Chunk)
+        RETURN dep.id as id, dep.text as text, dep.type as type
+        """
+        deps = self._query(deps_query, {"chunk_id": chunk_id})
+        result["dependencies"] = [r for r in deps if r.get("id")]
+
+        # Outgoing REFERENCES
+        refs_query = """
+        MATCH (c:Chunk {id: $chunk_id})-[:REFERENCES]->(ref:Chunk)
+        RETURN ref.id as id, ref.text as text, ref.type as type
+        """
+        refs = self._query(refs_query, {"chunk_id": chunk_id})
+        result["references"] = [r for r in refs if r.get("id")]
+
+        # Incoming DEPENDS_ON (what depends on this chunk)
+        dependents_query = """
+        MATCH (dependent:Chunk)-[:DEPENDS_ON]->(c:Chunk {id: $chunk_id})
+        RETURN dependent.id as id, dependent.text as text, dependent.type as type
+        """
+        dependents = self._query(dependents_query, {"chunk_id": chunk_id})
+        result["dependents"] = [r for r in dependents if r.get("id")]
+
+        # Outgoing PARENT_OF
+        children_query = """
+        MATCH (c:Chunk {id: $chunk_id})-[:PARENT_OF]->(child:Chunk)
+        RETURN child.id as id, child.text as text, child.type as type
+        """
+        children = self._query(children_query, {"chunk_id": chunk_id})
+        result["children"] = [r for r in children if r.get("id")]
+
+        return result
+
     def find_related_chunks(
         self, chunk_id: str, max_results: int = 10
     ) -> List[Dict[str, Any]]:
-        """
-        Find chunks related to the given chunk through any relationship
-
-        Args:
-            chunk_id: Chunk ID to query
-            max_results: Maximum number of results
-
-        Returns:
-            List of related chunks
-        """
-        with self.driver.session() as session:
-            result = session.execute_read(
-                self._find_related_chunks_tx, chunk_id, max_results
-            )
-        return result
-
-    @staticmethod
-    def _find_related_chunks_tx(tx, chunk_id, max_results):
+        """Find chunks related to the given chunk through any relationship."""
         query = """
         MATCH (c:Chunk {id: $chunk_id})-[r]-(related:Chunk)
         RETURN DISTINCT related.id as chunk_id,
@@ -265,17 +388,54 @@ class GraphService:
                related.priority as priority
         LIMIT $limit
         """
-        result = tx.run(query, chunk_id=chunk_id, limit=max_results)
-        return [dict(record) for record in result]
+        return self._query(query, {"chunk_id": chunk_id, "limit": max_results})
 
-    def get_graph_stats(self) -> Dict[str, Any]:
-        """Get statistics about the knowledge graph"""
-        with self.driver.session() as session:
-            result = session.execute_read(self._get_stats_tx)
+    # =========================================================================
+    # PRD List/Detail Operations
+    # =========================================================================
+
+    def get_all_prds(self) -> List[Dict[str, Any]]:
+        """Get all PRDs with chunk counts."""
+        query = """
+        MATCH (p:PRD)
+        OPTIONAL MATCH (p)<-[:BELONGS_TO]-(c:Chunk)
+        RETURN p.id as id,
+               p.name as name,
+               p.description as description,
+               count(c) as chunk_count
+        ORDER BY p.name
+        """
+        return self._query(query)
+
+    def get_prd_details(self, prd_id: str) -> Optional[Dict[str, Any]]:
+        """Get PRD with all its chunks."""
+        # First get the PRD
+        prd_query = """
+        MATCH (p:PRD {id: $prd_id})
+        RETURN p.id as id, p.name as name, p.description as description
+        """
+        prd_results = self._query(prd_query, {"prd_id": prd_id})
+        if not prd_results:
+            return None
+
+        result = prd_results[0]
+
+        # Then get chunks separately (FalkorDB handles this better)
+        chunks_query = """
+        MATCH (c:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        RETURN c.id as id, c.type as type, c.text as text, c.priority as priority
+        """
+        chunks = self._query(chunks_query, {"prd_id": prd_id})
+        result["chunks"] = [c for c in chunks if c.get("id")]
+
         return result
 
-    @staticmethod
-    def _get_stats_tx(tx):
+    # =========================================================================
+    # Statistics
+    # =========================================================================
+
+    def get_graph_stats(self) -> Dict[str, Any]:
+        """Get statistics about the knowledge graph."""
         query = """
         MATCH (c:Chunk)
         OPTIONAL MATCH ()-[r:DEPENDS_ON]->()
@@ -284,12 +444,29 @@ class GraphService:
                count(DISTINCT r) as dependency_count,
                count(DISTINCT r2) as reference_count
         """
-        result = tx.run(query)
-        record = result.single()
-        return dict(record) if record else {}
+        results = self._query(query)
+        return results[0] if results else {}
+
+    # =========================================================================
+    # Maintenance
+    # =========================================================================
+
+    def delete_prd(self, prd_id: str) -> bool:
+        """Delete a PRD and all its related chunks."""
+        # Delete all chunks belonging to this PRD
+        self._query(
+            "MATCH (c:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id}) DETACH DELETE c",
+            {"prd_id": prd_id}
+        )
+        # Delete the PRD node
+        self._query(
+            "MATCH (p:PRD {id: $prd_id}) DELETE p",
+            {"prd_id": prd_id}
+        )
+        logger.info(f"Deleted PRD from graph: {prd_id}")
+        return True
 
     def clear_all(self) -> None:
-        """Clear all data from the graph (use with caution!)"""
-        with self.driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
-        logger.warning("Cleared all data from Neo4j")
+        """Clear all data from the graph (use with caution!)."""
+        self._query("MATCH (n) DETACH DELETE n")
+        logger.warning("Cleared all data from FalkorDB")

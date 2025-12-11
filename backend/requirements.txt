@@ -12,8 +12,9 @@ alembic>=1.12.1
 # Vector Database
 qdrant-client>=1.7.0
 
-# Graph Database
-neo4j>=5.14.1
+# Graph Database (FalkorDB via Redis)
+# neo4j>=5.14.1  # Deprecated - using FalkorDB now
+# FalkorDB uses the redis client (already in Caching section)
 
 # Embeddings
 sentence-transformers>=2.2.2

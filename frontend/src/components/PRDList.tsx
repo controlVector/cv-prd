@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { listPRDs, optimizePRD } from '../services/api'
+import { ExportDialog } from './ExportDialog'
 import type { PRDSummary } from '../types'
 
 interface PRDListProps {
@@ -11,7 +12,7 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [optimizingPRD, setOptimizingPRD] = useState<string | null>(null)
-  const [optimizeResult, setOptimizeResult] = useState<any>(null)
+  const [showExportDialog, setShowExportDialog] = useState(false)
 
   useEffect(() => {
     loadPRDs()
@@ -32,11 +33,9 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
 
   const handleOptimize = async (prdId: string, prdName: string) => {
     setOptimizingPRD(prdId)
-    setOptimizeResult(null)
     setError(null)
     try {
       const result = await optimizePRD(prdId, 'AI Paired Programming')
-      setOptimizeResult(result)
       alert(`✓ PRD "${prdName}" optimized successfully!\n\n` +
         `Updated: ${result.statistics.facts_updated} facts\n` +
         `Created: ${result.statistics.facts_created} new facts\n` +
@@ -62,10 +61,25 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
     <div className="prd-list">
       <div className="list-header">
         <h2>Your PRDs</h2>
-        <button onClick={loadPRDs} className="btn-secondary">
-          Refresh
-        </button>
+        <div className="list-actions">
+          <button
+            onClick={() => setShowExportDialog(true)}
+            className="btn-secondary"
+            disabled={prds.length === 0}
+          >
+            Export
+          </button>
+          <button onClick={loadPRDs} className="btn-secondary">
+            Refresh
+          </button>
+        </div>
       </div>
+
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        prds={prds}
+      />
 
       {prds.length === 0 ? (
         <p className="empty-state">

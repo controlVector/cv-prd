@@ -6,9 +6,10 @@ from app.models.prd_models import PRD, Chunk
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_service import VectorService
 from app.services.graph_service import GraphService
+from app.services.database_service import DatabaseService
 from app.services.chunking_service import ChunkingService
 from app.core.config import settings
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,43 +26,77 @@ class PRDOrchestrator:
             collection_name=settings.QDRANT_COLLECTION,
             vector_size=settings.EMBEDDING_DIMENSION,
         )
-        # Graph service is optional (disabled in desktop mode)
-        self.graph_service = None
-        if settings.NEO4J_ENABLED:
+
+        # Database service for PostgreSQL persistence
+        self.db_service: Optional[DatabaseService] = None
+        try:
+            self.db_service = DatabaseService()
+            logger.info("PostgreSQL database service initialized")
+        except Exception as e:
+            logger.warning(f"Could not initialize database service: {e}")
+            logger.info("Running without PostgreSQL persistence")
+
+        # Graph service is optional (can be disabled)
+        self.graph_service: Optional[GraphService] = None
+        if settings.FALKORDB_ENABLED:
             try:
                 self.graph_service = GraphService(
-                    uri=settings.NEO4J_URI,
-                    user=settings.NEO4J_USER,
-                    password=settings.NEO4J_PASSWORD,
+                    url=settings.FALKORDB_URL,
+                    database=settings.FALKORDB_DATABASE,
                 )
-                logger.info("Graph service initialized")
+                logger.info("FalkorDB graph service initialized")
             except Exception as e:
                 logger.warning(f"Could not initialize graph service: {e}")
                 logger.info("Running without graph features")
 
-    def process_prd(self, prd: PRD) -> Dict[str, Any]:
+    def process_prd(self, prd: PRD, source_file: Optional[str] = None) -> Dict[str, Any]:
         """
         Complete workflow for processing a new PRD
 
         Args:
             prd: PRD object to process
+            source_file: Optional source filename for uploaded documents
 
         Returns:
             Dictionary with processing results
         """
         logger.info(f"Processing PRD: {prd.name}")
 
-        # 1. Chunk the PRD
+        # 1. Save PRD to PostgreSQL (if enabled)
+        if self.db_service:
+            try:
+                self.db_service.create_prd(
+                    prd_id=prd.id,
+                    name=prd.name,
+                    description=prd.description,
+                    raw_content=prd.content,
+                    source_file=source_file,
+                )
+                # Save sections
+                for idx, section in enumerate(prd.sections):
+                    self.db_service.create_section(
+                        prd_id=prd.id,
+                        title=section.title,
+                        content=section.content,
+                        priority=section.priority.value,
+                        tags=section.tags,
+                        order_index=idx,
+                    )
+                logger.info(f"Saved PRD to PostgreSQL: {prd.id}")
+            except Exception as e:
+                logger.warning(f"Failed to save PRD to PostgreSQL: {e}")
+
+        # 2. Chunk the PRD
         chunks = ChunkingService.chunk_prd(prd)
         logger.info(f"Created {len(chunks)} chunks")
 
-        # 2. Create PRD node in graph (if enabled)
+        # 3. Create PRD node in graph (if enabled)
         if self.graph_service:
             self.graph_service.create_prd_node(
                 prd_id=prd.id, prd_data={"name": prd.name, "description": prd.description}
             )
 
-        # 3. Process each chunk
+        # 4. Process each chunk
         for chunk in chunks:
             # Generate embedding
             full_text = f"{chunk.context_prefix} - {chunk.text}"
@@ -82,7 +117,24 @@ class PRDOrchestrator:
                 chunk_id=chunk.id, vector=vector, payload=payload
             )
 
-            # Create node in Neo4j (if enabled)
+            # Save chunk to PostgreSQL (if enabled)
+            if self.db_service:
+                try:
+                    self.db_service.create_chunk(
+                        chunk_id=chunk.id,
+                        prd_id=chunk.prd_id,
+                        chunk_type=chunk.chunk_type.value,
+                        text=chunk.text,
+                        context_prefix=chunk.context_prefix,
+                        priority=chunk.priority.value,
+                        tags=chunk.tags,
+                        metadata=chunk.metadata,
+                        vector_id=chunk.id,  # Same as chunk_id in Qdrant
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save chunk to PostgreSQL: {e}")
+
+            # Create node in FalkorDB (if enabled)
             if self.graph_service:
                 self.graph_service.create_chunk_node(
                     chunk_id=chunk.id,
@@ -182,9 +234,6 @@ class PRDOrchestrator:
         Returns:
             Context dictionary
         """
-        # Get the chunk from vector store
-        # (In production, you'd also store chunks in PostgreSQL)
-
         if not self.graph_service:
             return {
                 "chunk_id": chunk_id,
@@ -216,36 +265,31 @@ class PRDOrchestrator:
 
     def get_all_prds(self) -> List[Dict[str, Any]]:
         """
-        Get all PRDs from the graph
+        Get all PRDs - tries graph first, falls back to PostgreSQL
 
         Returns:
             List of PRD summaries
         """
-        if not self.graph_service:
-            # In desktop mode without Neo4j, return empty list
-            # In production, you'd query PostgreSQL
-            logger.info("Graph service not available, returning empty PRD list")
-            return []
+        # Try graph first (has chunk counts)
+        if self.graph_service:
+            try:
+                return self.graph_service.get_all_prds()
+            except Exception as e:
+                logger.warning(f"Failed to get PRDs from graph: {e}")
 
-        # This is a simple implementation
-        # In production, you'd query PostgreSQL
-        with self.graph_service.driver.session() as session:
-            result = session.run(
-                """
-                MATCH (p:PRD)
-                OPTIONAL MATCH (p)<-[:BELONGS_TO]-(c:Chunk)
-                RETURN p.id as id,
-                       p.name as name,
-                       p.description as description,
-                       count(c) as chunk_count
-                ORDER BY p.name
-            """
-            )
-            return [dict(record) for record in result]
+        # Fall back to PostgreSQL
+        if self.db_service:
+            try:
+                return self.db_service.get_all_prds()
+            except Exception as e:
+                logger.warning(f"Failed to get PRDs from database: {e}")
 
-    def get_prd_details(self, prd_id: str) -> Dict[str, Any]:
+        logger.info("No data services available, returning empty PRD list")
+        return []
+
+    def get_prd_details(self, prd_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get detailed information about a PRD
+        Get detailed information about a PRD - tries graph first, falls back to PostgreSQL
 
         Args:
             prd_id: PRD ID
@@ -253,36 +297,62 @@ class PRDOrchestrator:
         Returns:
             PRD details including chunks and statistics
         """
-        if not self.graph_service:
-            logger.info("Graph service not available")
-            return None
+        # Try graph first
+        if self.graph_service:
+            try:
+                result = self.graph_service.get_prd_details(prd_id)
+                if result:
+                    return result
+            except Exception as e:
+                logger.warning(f"Failed to get PRD details from graph: {e}")
 
-        with self.graph_service.driver.session() as session:
-            # Get PRD info
-            prd_result = session.run(
-                """
-                MATCH (p:PRD {id: $prd_id})
-                OPTIONAL MATCH (p)<-[:BELONGS_TO]-(c:Chunk)
-                RETURN p.id as id,
-                       p.name as name,
-                       p.description as description,
-                       collect({
-                           id: c.id,
-                           type: c.type,
-                           text: c.text,
-                           priority: c.priority
-                       }) as chunks
-            """,
-                prd_id=prd_id,
-            )
+        # Fall back to PostgreSQL
+        if self.db_service:
+            try:
+                return self.db_service.get_prd_details(prd_id)
+            except Exception as e:
+                logger.warning(f"Failed to get PRD details from database: {e}")
 
-            record = prd_result.single()
-            if not record:
-                return None
+        return None
 
-            return dict(record)
+    def delete_prd(self, prd_id: str) -> bool:
+        """
+        Delete a PRD from all storage systems
+
+        Args:
+            prd_id: PRD ID to delete
+
+        Returns:
+            True if successful
+        """
+        success = True
+
+        # Delete from PostgreSQL
+        if self.db_service:
+            try:
+                self.db_service.delete_prd(prd_id)
+                logger.info(f"Deleted PRD from PostgreSQL: {prd_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete PRD from PostgreSQL: {e}")
+                success = False
+
+        # Delete from graph
+        if self.graph_service:
+            try:
+                self.graph_service.delete_prd(prd_id)
+                logger.info(f"Deleted PRD from FalkorDB: {prd_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete PRD from graph: {e}")
+                success = False
+
+        # Note: Qdrant chunks would need to be deleted too in production
+        # For now, they will be orphaned
+
+        return success
 
     def close(self):
         """Close all service connections"""
         if self.graph_service:
             self.graph_service.close()
+        if self.db_service:
+            self.db_service.close()

@@ -18,24 +18,18 @@ services:
       timeout: 5s
       retries: 5
 
-  neo4j:
-    image: neo4j:5.14-community
-    container_name: cvprd-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/cvprd_dev
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_apoc_export_file_enabled: "true"
-      NEO4J_apoc_import_file_enabled: "true"
-      NEO4J_apoc_import_file_use__neo4j__config: "true"
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+  # FalkorDB - Redis-based graph database (replaces Neo4j)
+  # Much lighter weight, same Cypher query language
+  # Compatible with cv-git's graph infrastructure
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: cvprd-falkordb
     ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
+      - "6379:6379"  # Redis protocol
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+      - falkordb_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,11 +48,12 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis for caching/queues (separate from FalkorDB)
   redis:
     image: redis:7-alpine
     container_name: cvprd-redis
     ports:
-      - "6380:6379"  # Using 6380 to avoid conflict with system Redis
+      - "6380:6379"  # Using 6380 to avoid conflict with FalkorDB
     volumes:
       - redis_data:/data
     healthcheck:
@@ -69,7 +64,6 @@ services:
 
 volumes:
   postgres_data:
-  neo4j_data:
-  neo4j_logs:
+  falkordb_data:
   qdrant_data:
   redis_data:

@@ -11,20 +11,27 @@ class Settings(BaseSettings):
     # Database (supports both PostgreSQL and SQLite)
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://cvprd:cvprd_dev@localhost:5433/cvprd")
 
-    # Neo4j (optional for desktop version)
-    NEO4J_ENABLED: bool = os.getenv("NEO4J_ENABLED", "true").lower() == "true"
-    NEO4J_URI: str = "bolt://localhost:7687"
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "cvprd_dev"
+    # FalkorDB (Redis-based graph database - replaces Neo4j)
+    # Compatible with cv-git's graph infrastructure
+    FALKORDB_ENABLED: bool = os.getenv("FALKORDB_ENABLED", "true").lower() == "true"
+    FALKORDB_URL: str = os.getenv("FALKORDB_URL", "redis://localhost:6379")
+    FALKORDB_DATABASE: str = os.getenv("FALKORDB_DATABASE", "cvprd")
+
+    # Legacy Neo4j settings (deprecated, kept for backwards compatibility)
+    # These are no longer used - FalkorDB is now the default graph database
+    NEO4J_ENABLED: bool = False  # Deprecated - use FALKORDB_ENABLED
+    NEO4J_URI: str = "bolt://localhost:7687"  # Deprecated
+    NEO4J_USER: str = "neo4j"  # Deprecated
+    NEO4J_PASSWORD: str = "cvprd_dev"  # Deprecated
 
     # Qdrant
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
     QDRANT_COLLECTION: str = "prd_chunks"
 
-    # Redis (optional for desktop version)
+    # Redis for caching/queues (separate from FalkorDB)
     REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "true").lower() == "true"
-    REDIS_URL: str = "redis://localhost:6380"
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6380")
 
     # Embeddings
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"

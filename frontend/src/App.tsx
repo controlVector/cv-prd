@@ -8,15 +8,18 @@ import './App.css'
 
 function App() {
   const [activeTab, setActiveTab] = useState<'create' | 'upload' | 'search' | 'list'>(
-    'create'
+    'list'
   )
   const [selectedPRD, setSelectedPRD] = useState<string | null>(null)
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>cvPRD</h1>
-        <p>AI-Powered Product Requirements Documentation</p>
+        <img src="/cvlogo.png" alt="ControlVector" className="app-logo" />
+        <div className="app-header-content">
+          <h1>cvPRD</h1>
+          <p>AI-Powered Product Requirements Documentation</p>
+        </div>
       </header>
 
       <nav className="app-nav">
@@ -63,21 +66,21 @@ function App() {
 
       <footer className="app-footer">
         <p>
-          Powered by Qdrant, Neo4j, and sentence-transformers |{' '}
-          <a
-            href="http://localhost:7474"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Neo4j Browser
-          </a>{' '}
-          |{' '}
+          Powered by FalkorDB, Qdrant, and sentence-transformers |{' '}
           <a
             href="http://localhost:6333/dashboard"
             target="_blank"
             rel="noopener noreferrer"
           >
             Qdrant Dashboard
+          </a>{' '}
+          |{' '}
+          <a
+            href="http://localhost:8000/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            API Docs
           </a>
         </p>
       </footer>

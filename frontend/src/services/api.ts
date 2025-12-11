@@ -93,3 +93,31 @@ export const uploadDocument = async (
   })
   return response.data
 }
+
+// Export types
+export interface ExportFormat {
+  id: string
+  name: string
+  description: string
+  types: { id: string; name: string; description: string }[]
+  disabled?: boolean
+}
+
+export interface ExportRequest {
+  format: string
+  export_type: string
+  prd_ids?: string[]
+  project_name?: string
+}
+
+export const getExportFormats = async (): Promise<{ formats: ExportFormat[] }> => {
+  const response = await api.get('/export/formats')
+  return response.data
+}
+
+export const exportPRDs = async (request: ExportRequest): Promise<Blob> => {
+  const response = await api.post('/export', request, {
+    responseType: 'blob',
+  })
+  return response.data
+}

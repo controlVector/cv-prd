@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getPRD, optimizePRD } from '../services/api'
+import { downloadMarkdown, copyMarkdownToClipboard } from '../utils/markdown-export'
 
 interface PRDDetailProps {
   prdId: string
@@ -12,6 +13,7 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
   const [error, setError] = useState<string | null>(null)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizationResult, setOptimizationResult] = useState<any>(null)
+  const [copySuccess, setCopySuccess] = useState(false)
 
   useEffect(() => {
     loadPRD()
@@ -27,6 +29,22 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
       setError(err.response?.data?.detail || 'Failed to load PRD details')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDownloadMarkdown = () => {
+    if (prdData) {
+      downloadMarkdown(prdData)
+    }
+  }
+
+  const handleCopyMarkdown = async () => {
+    if (prdData) {
+      const success = await copyMarkdownToClipboard(prdData)
+      if (success) {
+        setCopySuccess(true)
+        setTimeout(() => setCopySuccess(false), 2000)
+      }
     }
   }
 
@@ -94,6 +112,20 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
       <div className="prd-detail-header">
         <button onClick={onBack} className="btn-secondary">← Back to List</button>
         <div className="prd-detail-actions">
+          <button
+            onClick={handleCopyMarkdown}
+            className="btn-secondary"
+            title="Copy as Markdown"
+          >
+            {copySuccess ? '✓ Copied!' : '📋 Copy MD'}
+          </button>
+          <button
+            onClick={handleDownloadMarkdown}
+            className="btn-secondary"
+            title="Download as Markdown (opens in cv-md)"
+          >
+            📥 Export MD
+          </button>
           <button
             onClick={handleOptimize}
             disabled={isOptimizing}

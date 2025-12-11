@@ -148,18 +148,18 @@ class VectorService:
             if conditions:
                 query_filter = Filter(must=conditions)
 
-        # Perform search
-        results = self.client.search(
+        # Perform search using query_points (new Qdrant API)
+        results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
-            score_threshold=score_threshold,
+            score_threshold=score_threshold if score_threshold > 0 else None,
             query_filter=query_filter,
         )
 
-        # Format results
+        # Format results - query_points returns QueryResponse with .points
         formatted_results = []
-        for hit in results:
+        for hit in results.points:
             formatted_results.append(
                 {"chunk_id": hit.id, "score": hit.score, "payload": hit.payload}
             )
@@ -175,8 +175,13 @@ class VectorService:
     def get_collection_info(self) -> Dict[str, Any]:
         """Get information about the collection"""
         info = self.client.get_collection(collection_name=self.collection_name)
+        # Qdrant API changed - vectors_count may be in different locations
+        vectors_count = getattr(info, 'vectors_count', None)
+        if vectors_count is None:
+            vectors_count = getattr(info, 'points_count', 0)
+        points_count = getattr(info, 'points_count', 0)
         return {
             "name": self.collection_name,
-            "vectors_count": info.vectors_count,
-            "points_count": info.points_count,
+            "vectors_count": vectors_count,
+            "points_count": points_count,
         }
