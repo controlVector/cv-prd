@@ -1,6 +1,125 @@
-# cv-git Bug Tracker
+# cv-git Bug & Feature Tracker
 
-This file tracks known bugs in cv-git that need to be fixed.
+This file tracks known bugs and feature requests for cv-git.
+
+---
+
+# Feature Requests
+
+## FEAT-001: Git Identity Management per Repository
+
+**Status:** OPEN
+**Priority:** High
+**Requested:** 2025-12-11
+**Component:** packages/cli, packages/credentials
+
+### Problem
+
+Developers often work with multiple git identities across different platforms (GitHub, GitLab, Bitbucket) and organizations. Currently, managing `user.name` and `user.email` per repository is manual and error-prone:
+
+- Forgetting to set identity leads to commits with wrong author
+- Global config gets overwritten
+- No easy way to switch between work/personal/client identities
+- SSH keys and credentials are separate from git identity
+
+### Proposed Solution
+
+Add git identity profiles to cv-git that can be linked to repositories:
+
+```bash
+# Create identity profiles
+cv identity create work --name "John Doe" --email "john@company.com" --signing-key "ABC123"
+cv identity create personal --name "johndoe" --email "john@gmail.com"
+cv identity create client-acme --name "John Doe" --email "john@acme-consulting.com"
+
+# Link identity to current repo
+cv identity use work
+
+# Or link during clone
+cv clone git@github.com:company/repo.git --identity work
+
+# List identities
+cv identity list
+
+# Show current repo's identity
+cv identity show
+
+# Auto-detect based on remote URL patterns
+cv identity auto-link github.com/company/* work
+cv identity auto-link gitlab.com/personal/* personal
+```
+
+### Features to Include
+
+1. **Identity Profiles**
+   - Store name, email, signing key (GPG/SSH)
+   - Optional: linked SSH key path
+   - Optional: linked platform credentials (GitHub token, etc.)
+
+2. **Repository Linking**
+   - Per-repo identity stored in `.cv/config.json`
+   - Automatically set `git config user.name/email` on cv operations
+   - Warn if repo identity doesn't match current git config
+
+3. **Auto-linking Rules**
+   - Pattern-based rules (e.g., `*github.com/company/*` → work identity)
+   - Applied during `cv clone` or `cv init`
+
+4. **Integration with cv auth**
+   - Link platform credentials to identities
+   - `cv auth setup github --identity work`
+
+5. **Identity Verification**
+   - `cv identity verify` - check if current repo's git config matches linked identity
+   - Pre-commit hook option to enforce identity
+
+### Storage
+
+```json
+// ~/.cv-git/identities.json
+{
+  "profiles": {
+    "work": {
+      "name": "John Doe",
+      "email": "john@company.com",
+      "signingKey": "ABC123",
+      "sshKey": "~/.ssh/id_work",
+      "platforms": ["github:company-org"]
+    },
+    "personal": {
+      "name": "johndoe",
+      "email": "john@gmail.com"
+    }
+  },
+  "autoLink": [
+    { "pattern": "github.com/company/*", "identity": "work" },
+    { "pattern": "gitlab.com/johndoe/*", "identity": "personal" }
+  ]
+}
+
+// .cv/config.json (per-repo)
+{
+  "identity": "work",
+  ...
+}
+```
+
+### Implementation Notes
+
+- Should work alongside existing git config (don't fight git, enhance it)
+- Consider integration with git's `includeIf` for automatic switching
+- SSH agent integration for key selection
+- Support for commit signing (GPG and SSH signatures)
+
+### Related
+
+- `cv auth` already manages platform credentials
+- Could integrate with `cv clone` and `cv init` workflows
+- Potential MCP server integration for IDE identity switching
+
+---
+
+# Bugs
 
 ---
 
