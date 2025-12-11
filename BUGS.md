@@ -119,6 +119,120 @@ cv identity auto-link gitlab.com/personal/* personal
 
 ---
 
+## FEAT-002: Per-Repository Database Isolation
+
+**Status:** OPEN
+**Priority:** Critical
+**Requested:** 2025-12-11
+**Component:** packages/core, packages/cli
+
+### Problem
+
+Currently, cv-git uses a single shared database for all repositories:
+- FalkorDB graph: `cv-git` (single database)
+- Qdrant vectors: `code_chunks`, `docstrings`, `commits` (single collections)
+
+When switching between repositories and running `cv sync`, the previous repo's data is **overwritten**. This makes cv-git unusable for developers working on multiple projects.
+
+### Current Behavior
+
+```bash
+cd ~/project/repo-a
+cv sync  # Indexes repo-a into cv-git database
+
+cd ~/project/repo-b
+cv sync  # OVERWRITES repo-a data with repo-b data
+
+cd ~/project/repo-a
+cv find "something"  # Returns results from repo-b (wrong!)
+```
+
+### Desired Behavior
+
+Each repository should have isolated, persistent data:
+
+```bash
+cd ~/project/repo-a
+cv sync  # Indexes to repo-a specific database
+
+cd ~/project/repo-b
+cv sync  # Indexes to repo-b specific database (repo-a untouched)
+
+cd ~/project/repo-a
+cv find "something"  # Returns results from repo-a (correct!)
+```
+
+### Proposed Solution
+
+**Option A: Per-repo database names (Recommended)**
+
+Use repository name/hash as database identifier:
+- FalkorDB: `cv-git-{repo-hash}` or `cv-git-{repo-name}`
+- Qdrant: `{repo-hash}_code_chunks`, `{repo-hash}_docstrings`
+
+```json
+// .cv/config.json
+{
+  "repository": {
+    "id": "a1b2c3d4",  // Hash of repo root path or remote URL
+    "name": "cv-git",
+    "root": "/home/user/project/cv-git"
+  },
+  "graph": {
+    "database": "cv-a1b2c3d4"  // Unique per repo
+  },
+  "vector": {
+    "collections": {
+      "codeChunks": "a1b2c3d4_code_chunks",
+      "docstrings": "a1b2c3d4_docstrings",
+      "commits": "a1b2c3d4_commits"
+    }
+  }
+}
+```
+
+**Option B: Exportable snapshots**
+
+Store graph/vector data as files in `.cv/` that can be loaded on demand:
+- `.cv/graph/nodes.jsonl` - Graph nodes
+- `.cv/graph/edges.jsonl` - Graph edges
+- `.cv/vectors/embeddings.bin` - Vector embeddings
+
+```bash
+cv sync          # Updates .cv/ files AND loads into running DB
+cv load          # Load .cv/ files into DB (when switching repos)
+cv unload        # Clear current repo from DB (free memory)
+```
+
+**Option C: Hybrid approach**
+
+- Use per-repo database names (Option A) for active development
+- Export to `.cv/` files for portability/backup (Option B)
+- Auto-load from `.cv/` files if database is empty
+
+### Implementation Considerations
+
+1. **Database naming**: Use hash of repo path or git remote URL
+2. **Collection cleanup**: Command to remove old/unused repo databases
+3. **Memory management**: FalkorDB/Qdrant may need limits with many repos
+4. **Portability**: `.cv/` export allows sharing graph data via git
+
+### Files to Modify
+
+- `packages/core/src/config/index.ts` - Generate unique database names
+- `packages/cli/src/commands/init.ts` - Set up per-repo database
+- `packages/cli/src/commands/sync.ts` - Use repo-specific database
+- `packages/core/src/graph/index.ts` - Support dynamic database names
+- `packages/core/src/vector/index.ts` - Support dynamic collection names
+
+### Related
+
+- `.cv-prd/` already uses file-based storage (graph/nodes.jsonl, etc.)
+- Could unify approach between cv-git and cv-prd
+- Workspace mode already supports multiple repos with shared database
+
+---
+
 # Bugs
 
 ---
