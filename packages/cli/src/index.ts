@@ -31,6 +31,7 @@ import { designCommand } from './commands/design.js';
 import { codeCommand } from './commands/code.js';
 import { preferencesCommand } from './commands/preferences.js';
 import { createPRDCommand } from './commands/prd.js';
+import { importCommand } from './commands/import.js';
 
 const program = new Command();
 
@@ -64,6 +65,7 @@ program.addCommand(reviewCommand());
 program.addCommand(graphCommand());
 program.addCommand(gitCommand());
 program.addCommand(createPRDCommand());     // PRD management (cv prd)
+program.addCommand(importCommand());        // Import PRD data from cv-prd exports
 
 // Error handler
 program.exitOverride((err) => {

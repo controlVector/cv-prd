@@ -2,11 +2,11 @@
  * cv prd - PRD (Product Requirements Document) management
  *
  * Supports two modes:
- * 1. File mode: .cv-prd/ directory in repo (local-first, portable)
+ * 1. File mode: .cvprd/ directory in repo (local-first, portable)
  * 2. API mode: Connect to cv-prd backend server
  *
  * Usage:
- *   cv prd init                    Initialize .cv-prd/ in current repo
+ *   cv prd init                    Initialize .cvprd/ in current repo
  *   cv prd add <file>              Add a PRD markdown file
  *   cv prd list                    List PRDs
  *   cv prd show <prd-id>           Show PRD details
@@ -118,7 +118,7 @@ export function createPRDCommand(): Command {
   // ═══════════════════════════════════════════════════════════════
   prd
     .command('init')
-    .description('Initialize .cv-prd/ directory in current repository')
+    .description('Initialize .cvprd/ directory in current repository')
     .option('--api <url>', 'Connect to cv-prd API instead of file mode')
     .action(async (options) => {
       const spinner = ora('Initializing PRD directory...').start();
@@ -130,7 +130,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
 
         // Check if already initialized
         if (await fileExists(path.join(prdDir, 'manifest.json'))) {
@@ -213,7 +213,7 @@ export function createPRDCommand(): Command {
           JSON.stringify({ coverage: {}, updated: new Date().toISOString() }, null, 2)
         );
 
-        spinner.succeed(`Initialized .cv-prd/ in ${repoRoot}`);
+        spinner.succeed(`Initialized .cvprd/ in ${repoRoot}`);
 
         console.log('\nNext steps:');
         console.log('  cv prd add <requirements.md>   Add a PRD document');
@@ -241,7 +241,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
 
         // Check if initialized
         if (!(await fileExists(path.join(prdDir, 'manifest.json')))) {
@@ -314,7 +314,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
 
         if (options.api) {
           // API mode
@@ -338,7 +338,7 @@ export function createPRDCommand(): Command {
         } else {
           // File mode
           if (!(await fileExists(path.join(prdDir, 'manifest.json')))) {
-            console.log(chalk.yellow('No .cv-prd/ directory. Run: cv prd init'));
+            console.log(chalk.yellow('No .cvprd/ directory. Run: cv prd init'));
             return;
           }
 
@@ -380,7 +380,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
 
         const manifest = await loadManifest(prdDir);
         const entry = manifest.prds.find(p => p.id === prdId);
@@ -391,7 +391,7 @@ export function createPRDCommand(): Command {
         }
 
         // Read PRD content
-        const content = await fs.readFile(path.join(repoRoot, '.cv-prd', entry.file), 'utf-8');
+        const content = await fs.readFile(path.join(repoRoot, '.cvprd', entry.file), 'utf-8');
         const parsed = parsePRDMarkdown(content, prdId);
 
         console.log(chalk.bold(`\n${parsed.name}`));
@@ -480,7 +480,7 @@ export function createPRDCommand(): Command {
           }
         } else {
           // Local file mode - use vector search
-          const prdDir = path.join(repoRoot, '.cv-prd');
+          const prdDir = path.join(repoRoot, '.cvprd');
 
           if (!(await fileExists(path.join(prdDir, 'manifest.json')))) {
             spinner.fail('PRD not initialized. Run: cv prd init');
@@ -547,7 +547,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
         const config = await configManager.load(repoRoot);
 
         if (!(await fileExists(path.join(prdDir, 'manifest.json')))) {
@@ -578,7 +578,7 @@ export function createPRDCommand(): Command {
 
         for (const entry of prdsToSync) {
           const content = await fs.readFile(
-            path.join(repoRoot, '.cv-prd', entry.file),
+            path.join(repoRoot, '.cvprd', entry.file),
             'utf-8'
           );
           const parsed = parsePRDMarkdown(content, entry.id);
@@ -721,7 +721,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
 
         // Parse location (file:line format)
         let file: string;
@@ -813,7 +813,7 @@ export function createPRDCommand(): Command {
           return;
         }
 
-        const prdDir = path.join(repoRoot, '.cv-prd');
+        const prdDir = path.join(repoRoot, '.cvprd');
 
         const manifest = await loadManifest(prdDir);
         const coverageFile = path.join(prdDir, 'links', 'coverage.json');
@@ -826,7 +826,7 @@ export function createPRDCommand(): Command {
 
         for (const entry of manifest.prds) {
           const content = await fs.readFile(
-            path.join(repoRoot, '.cv-prd', entry.file),
+            path.join(repoRoot, '.cvprd', entry.file),
             'utf-8'
           );
           const parsed = parsePRDMarkdown(content, entry.id);
