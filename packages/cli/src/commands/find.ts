@@ -7,9 +7,11 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import {
   configManager,
-  createVectorManager
+  createVectorManager,
+  getStorageInfo,
+  loadVectorsOnly
 } from '@cv-git/core';
-import { findRepoRoot } from '@cv-git/shared';
+import { findRepoRoot, getCVDir } from '@cv-git/shared';
 import { VectorSearchResult, CodeChunkPayload } from '@cv-git/shared';
 import { addGlobalOptions, createOutput } from '../utils/output.js';
 import { getEmbeddingCredentials } from '../utils/credentials.js';
@@ -66,6 +68,33 @@ export function findCommand(): Command {
 
         await vector.connect();
         spinner.succeed('Connected to vector database');
+
+        // Check if vectors are available in database
+        let hasVectors = false;
+        try {
+          const collectionInfo = await vector.getCollectionInfo('code_chunks');
+          hasVectors = (collectionInfo?.points_count || 0) > 0;
+        } catch {
+          // Collection might not exist
+        }
+
+        // Auto-load from .cv/ storage if needed
+        if (!hasVectors) {
+          const storageInfo = await getStorageInfo(repoRoot);
+          if (storageInfo && storageInfo.stats.vectors > 0) {
+            spinner.start(`Loading ${storageInfo.stats.vectors} vectors from .cv/ storage...`);
+            try {
+              const loadedCount = await loadVectorsOnly(repoRoot, vector);
+              spinner.succeed(`Loaded ${loadedCount} vectors from local storage`);
+            } catch (loadError: any) {
+              spinner.warn(`Could not load vectors: ${loadError.message}`);
+            }
+          } else if (storageInfo && storageInfo.stats.vectors === 0) {
+            spinner.warn('No vectors in storage. Run "cv sync --force" with embedding API key first.');
+          } else {
+            spinner.warn('No local storage found. Run "cv sync" first.');
+          }
+        }
 
         // Perform search
         spinner.start('Searching...');

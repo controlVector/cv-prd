@@ -13,7 +13,8 @@ import {
   createParser,
   createGraphManager,
   createVectorManager,
-  createSyncEngine
+  createSyncEngine,
+  exportToStorage
 } from '@cv-git/core';
 import {
   findRepoRoot,
@@ -253,6 +254,25 @@ export function syncCommand(): Command {
           console.log(chalk.green('✔ Full sync completed'));
 
           displaySyncResults(syncState);
+
+          // Export to .cv/ files for portability
+          console.log();
+          spinner = output.spinner('Exporting to .cv/ storage...').start();
+          try {
+            const embeddingConfig = config.embedding ? {
+              provider: config.embedding.provider || 'openrouter',
+              model: config.embedding.model || 'openai/text-embedding-3-small',
+              dimensions: 1536
+            } : undefined;
+
+            const exportResult = await exportToStorage(repoRoot, graph, vector, embeddingConfig);
+            spinner.succeed(
+              `Exported to .cv/: ${exportResult.stats.files} files, ${exportResult.stats.symbols} symbols, ${exportResult.stats.vectors} vectors`
+            );
+          } catch (exportError: any) {
+            spinner.warn(`Export to .cv/ failed: ${exportError.message}`);
+            output.debug(exportError.stack);
+          }
         }
 
         // Close connections

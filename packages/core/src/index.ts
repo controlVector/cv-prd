@@ -16,3 +16,4 @@ export * from './ai/system-capabilities.js';
 export * from './sync/index.js';
 export * from './config/index.js';
 export * from './code/index.js';
+export * from './storage/index.js';

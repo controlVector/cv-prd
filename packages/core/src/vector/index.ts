@@ -778,6 +778,56 @@ export class VectorManager {
   }
 
   /**
+   * Scroll through all points in a collection
+   * Used for exporting vectors to file storage
+   */
+  async scroll(
+    collection: string,
+    limit: number = 100,
+    offset?: string
+  ): Promise<{
+    points: Array<{
+      id: string | number;
+      vector: number[];
+      payload: Record<string, unknown>;
+    }>;
+    next_page_offset?: string;
+  }> {
+    if (!this.client) {
+      throw new VectorError('Not connected to Qdrant');
+    }
+
+    try {
+      // Qdrant scroll API: offset is a point ID (number or string)
+      const scrollOptions: any = {
+        limit,
+        with_vector: true,
+        with_payload: true
+      };
+
+      // Only set offset if provided (skip on first call)
+      if (offset) {
+        // Try to parse as number first, otherwise use string
+        const parsedOffset = parseInt(offset, 10);
+        scrollOptions.offset = isNaN(parsedOffset) ? offset : parsedOffset;
+      }
+
+      const result = await this.client.scroll(collection, scrollOptions);
+
+      return {
+        points: result.points.map(p => ({
+          id: p.id,
+          vector: p.vector as number[],
+          payload: p.payload as Record<string, unknown>
+        })),
+        next_page_offset: result.next_page_offset != null ? String(result.next_page_offset) : undefined
+      };
+    } catch (error: any) {
+      throw new VectorError(`Failed to scroll collection: ${error.message}`, error);
+    }
+  }
+
+  /**
    * Close connection
    */
   async close(): Promise<void> {
