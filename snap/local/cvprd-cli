@@ -1,0 +1,47 @@
+#!/bin/bash
+# CV-PRD CLI helper
+
+case "$1" in
+    start)
+        sudo snap start cv-prd
+        echo "cv-prd started. Access at http://localhost:8000"
+        ;;
+    stop)
+        sudo snap stop cv-prd
+        echo "cv-prd stopped"
+        ;;
+    restart)
+        sudo snap restart cv-prd
+        echo "cv-prd restarted"
+        ;;
+    status)
+        snap services cv-prd
+        ;;
+    logs)
+        sudo journalctl -u snap.cv-prd.cv-prd -f
+        ;;
+    open)
+        xdg-open http://localhost:8000 2>/dev/null || echo "Open http://localhost:8000 in your browser"
+        ;;
+    setup-db)
+        echo "Setting up databases with Docker..."
+        docker compose -f "$SNAP/etc/docker-compose.yml" up -d
+        echo "Databases started: PostgreSQL, Redis, FalkorDB, Qdrant"
+        ;;
+    *)
+        echo "CV-PRD - AI-Powered Product Requirements Documentation"
+        echo ""
+        echo "Usage: cvprd <command>"
+        echo ""
+        echo "Commands:"
+        echo "  start     Start cv-prd service"
+        echo "  stop      Stop cv-prd service"
+        echo "  restart   Restart cv-prd service"
+        echo "  status    Show service status"
+        echo "  logs      Show service logs"
+        echo "  open      Open cv-prd in browser"
+        echo "  setup-db  Start database containers"
+        echo ""
+        echo "Access the app at: http://localhost:8000"
+        ;;
+esac

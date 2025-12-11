@@ -1,0 +1,97 @@
+name: cv-prd
+version: '0.1.0'
+summary: AI-Powered Product Requirements Documentation
+description: |
+  CV-PRD helps you create, manage, and search Product Requirements Documents
+  using AI and knowledge graphs.
+
+  Features:
+  - Create PRDs with AI assistance
+  - Upload existing documents (DOCX, Markdown)
+  - Semantic search across all requirements
+  - Export to cv-git for code traceability
+  - Knowledge graph visualization
+
+  After installation, run `cv-prd` to start the application.
+  Then open http://localhost:8000 in your browser.
+
+base: core22
+confinement: strict
+grade: stable
+license: MIT
+
+architectures:
+  - build-on: amd64
+
+# Desktop integration
+apps:
+  cv-prd:
+    command: bin/cv-prd-launcher
+    daemon: simple
+    restart-condition: on-failure
+    plugs:
+      - network
+      - network-bind
+    environment:
+      PYTHONPATH: $SNAP/lib/python3.10/site-packages
+      PATH: $SNAP/usr/bin:$SNAP/bin:$PATH
+
+  cvprd:
+    command: bin/cvprd-cli
+    plugs:
+      - network
+
+# App store metadata
+icon: snap/gui/cv-prd.png
+website: https://github.com/controlVector/cv-prd
+source-code: https://github.com/controlVector/cv-prd
+issues: https://github.com/controlVector/cv-prd/issues
+
+parts:
+  # Backend (Python FastAPI)
+  backend:
+    plugin: python
+    source: backend
+    python-requirements:
+      - requirements.txt
+    build-packages:
+      - python3-dev
+      - build-essential
+      - libpq-dev
+    stage-packages:
+      - python3
+      - libpq5
+    override-build: |
+      craftctl default
+      # Copy app code
+      mkdir -p $SNAPCRAFT_PART_INSTALL/app
+      cp -r app/* $SNAPCRAFT_PART_INSTALL/app/
+
+  # Frontend (React built files)
+  frontend:
+    plugin: npm
+    source: frontend
+    npm-include-node: true
+    npm-node-version: "20.10.0"
+    override-build: |
+      npm install
+      npm run build
+      mkdir -p $SNAPCRAFT_PART_INSTALL/frontend
+      cp -r dist/* $SNAPCRAFT_PART_INSTALL/frontend/
+
+  # Launcher scripts
+  launchers:
+    plugin: dump
+    source: snap/local
+    organize:
+      cv-prd-launcher: bin/cv-prd-launcher
+      cvprd-cli: bin/cvprd-cli
+
+  # Include Docker Compose for databases
+  docker-compose-file:
+    plugin: dump
+    source: .
+    organize:
+      infrastructure/docker/docker-compose.yml: etc/docker-compose.yml
+    stage:
+      - etc/docker-compose.yml
