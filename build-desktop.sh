@@ -30,6 +30,7 @@ cd ..
 # Step 2: Build Python backend with PyInstaller
 echo ""
 echo "=== Building Python Backend ==="
+cd backend
 
 # Create virtual environment if needed
 if [ ! -d "venv" ]; then
@@ -43,10 +44,12 @@ pip install -r requirements.txt
 pip install pyinstaller
 
 # Create binaries directory
-mkdir -p src-tauri/binaries
+mkdir -p ../src-tauri/binaries
 
 # Build backend executable
-pyinstaller cv-prd-backend.spec --distpath src-tauri/binaries --clean -y
+pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
+
+cd ..
 
 # Rename based on platform (Tauri expects platform suffix)
 if [ "$PLATFORM" = "windows" ]; then
@@ -61,11 +64,14 @@ else
     BACKEND_NAME="cv-prd-backend-x86_64-unknown-linux-gnu"
 fi
 
-if [ -f "src-tauri/binaries/cv-prd-backend" ]; then
+# Look for the generated executable (PyInstaller output name)
+if [ -f "src-tauri/binaries/cvprd-backend" ]; then
+    mv "src-tauri/binaries/cvprd-backend" "src-tauri/binaries/$BACKEND_NAME"
+elif [ -f "src-tauri/binaries/cv-prd-backend" ]; then
     mv "src-tauri/binaries/cv-prd-backend" "src-tauri/binaries/$BACKEND_NAME"
 fi
 
-deactivate
+deactivate 2>/dev/null || true
 
 # Step 3: Build Tauri application
 echo ""

@@ -54,3 +54,23 @@ models/
 tmp/
 temp/
 *.tmp
+
+# Build artifacts
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.dmg
+*.msi
+
+# Tauri binaries (built by PyInstaller)
+src-tauri/binaries/
+
+# Snap build directories
+parts/
+prime/
+stage/
+*.snap
+
+# PyInstaller spec (use cvprd-onefile.spec in backend/)
+cv-prd-backend.spec
