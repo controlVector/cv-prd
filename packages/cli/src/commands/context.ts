@@ -19,7 +19,7 @@ import {
 } from '@cv-git/core';
 import { findRepoRoot, VectorSearchResult, CodeChunkPayload, SymbolNode } from '@cv-git/shared';
 import { addGlobalOptions, createOutput } from '../utils/output.js';
-import { getEmbeddingApiKey } from '../utils/credentials.js';
+import { getEmbeddingCredentials } from '../utils/credentials.js';
 
 interface ContextOptions {
   limit: string;
@@ -28,6 +28,7 @@ interface ContextOptions {
   format: 'markdown' | 'xml' | 'json';
   includeGraph: boolean;
   includeFiles: boolean;
+  prd: boolean;
   minScore: string;
 }
 
@@ -43,6 +44,7 @@ export function contextCommand(): Command {
     .option('-f, --format <format>', 'Output format: markdown, xml, json', 'markdown')
     .option('--no-graph', 'Skip graph relationships')
     .option('--no-files', 'Skip full file contents')
+    .option('--prd', 'Include PRD requirements context')
     .option('--min-score <score>', 'Minimum similarity score (0-1)', '0.5');
 
   addGlobalOptions(cmd);
@@ -67,21 +69,26 @@ export function contextCommand(): Command {
 
       const config = await configManager.load(repoRoot);
 
-      // Check for API key (needed for embeddings) - CredentialManager -> config -> env var
-      const openaiApiKey = await getEmbeddingApiKey({ openaiKey: config.ai.apiKey });
-      if (!openaiApiKey) {
+      // Get embedding credentials (OpenRouter preferred)
+      const embeddingCreds = await getEmbeddingCredentials({
+        openRouterKey: config.embedding?.apiKey,
+        openaiKey: config.ai?.apiKey
+      });
+
+      if (!embeddingCreds.openrouterApiKey && !embeddingCreds.openaiApiKey) {
         if (spinner) spinner.fail(chalk.red('No embedding API key found'));
-        else console.error('Error: Run `cv auth setup openai` or set OPENAI_API_KEY');
+        else console.error('Error: Run `cv auth setup openrouter` or set OPENROUTER_API_KEY');
         process.exit(1);
       }
 
       // Initialize managers
       log('Connecting to vector database...');
-      const vector = createVectorManager(
-        config.vector.url,
-        openaiApiKey,
-        config.vector.collections
-      );
+      const vector = createVectorManager({
+        url: config.vector.url,
+        openrouterApiKey: embeddingCreds.openrouterApiKey,
+        openaiApiKey: embeddingCreds.openaiApiKey,
+        collections: config.vector.collections
+      });
       await vector.connect();
 
       let graph = null;
@@ -160,20 +167,50 @@ export function contextCommand(): Command {
         }
       }
 
+      // Gather PRD requirements context if requested
+      let prdRequirements: Array<{
+        id: string;
+        text: string;
+        priority: string;
+        prdId: string;
+        score: number;
+      }> = [];
+
+      if (options.prd) {
+        log('Searching for relevant requirements...');
+        try {
+          // Search prd_chunks collection
+          const prdResults = await vector.search('prd_chunks', query, 5);
+
+          for (const result of prdResults) {
+            const payload = result.payload as Record<string, unknown>;
+            prdRequirements.push({
+              id: result.id as string || 'unknown',
+              text: payload.text as string || '',
+              priority: payload.priority as string || 'medium',
+              prdId: payload.prd_id as string || '',
+              score: result.score
+            });
+          }
+        } catch (e) {
+          // PRD collection may not exist
+        }
+      }
+
       // Generate output
       log('Generating context...');
       let contextOutput: string;
 
       switch (options.format) {
         case 'xml':
-          contextOutput = generateXMLContext(query, chunks, symbols, relationships, fileContents);
+          contextOutput = generateXMLContext(query, chunks, symbols, relationships, fileContents, prdRequirements);
           break;
         case 'json':
-          contextOutput = generateJSONContext(query, chunks, symbols, relationships, fileContents);
+          contextOutput = generateJSONContext(query, chunks, symbols, relationships, fileContents, prdRequirements);
           break;
         case 'markdown':
         default:
-          contextOutput = generateMarkdownContext(query, chunks, symbols, relationships, fileContents);
+          contextOutput = generateMarkdownContext(query, chunks, symbols, relationships, fileContents, prdRequirements);
           break;
       }
 
@@ -199,6 +236,15 @@ export function contextCommand(): Command {
   return cmd;
 }
 
+// Type for PRD requirements
+interface PRDRequirement {
+  id: string;
+  text: string;
+  priority: string;
+  prdId: string;
+  score: number;
+}
+
 /**
  * Generate markdown context output
  */
@@ -207,7 +253,8 @@ function generateMarkdownContext(
   chunks: VectorSearchResult<CodeChunkPayload>[],
   symbols: SymbolNode[],
   relationships: Map<string, { callers: string[]; callees: string[] }>,
-  fileContents: Map<string, string>
+  fileContents: Map<string, string>,
+  prdRequirements: PRDRequirement[] = []
 ): string {
   const lines: string[] = [];
 
@@ -223,6 +270,9 @@ function generateMarkdownContext(
   lines.push(`- **Relevant chunks**: ${chunks.length}`);
   lines.push(`- **Related symbols**: ${symbols.length}`);
   lines.push(`- **Files**: ${fileContents.size}`);
+  if (prdRequirements.length > 0) {
+    lines.push(`- **Requirements**: ${prdRequirements.length}`);
+  }
   lines.push('');
 
   // Relevant code chunks
@@ -268,6 +318,25 @@ function generateMarkdownContext(
     }
   }
 
+  // PRD Requirements
+  if (prdRequirements.length > 0) {
+    lines.push('## Related Requirements');
+    lines.push('');
+    lines.push('The following business requirements are relevant to this task:');
+    lines.push('');
+
+    for (const req of prdRequirements) {
+      const priorityIcon = req.priority === 'critical' ? '🔴' :
+        req.priority === 'high' ? '🟡' : '⚪';
+      lines.push(`### ${priorityIcon} ${req.priority.toUpperCase()} (${(req.score * 100).toFixed(0)}% match)`);
+      lines.push('');
+      lines.push(`**ID**: ${req.id}`);
+      lines.push('');
+      lines.push(req.text);
+      lines.push('');
+    }
+  }
+
   // Full file contents
   if (fileContents.size > 0) {
     lines.push('## Full File Contents');
@@ -295,7 +364,8 @@ function generateXMLContext(
   chunks: VectorSearchResult<CodeChunkPayload>[],
   symbols: SymbolNode[],
   relationships: Map<string, { callers: string[]; callees: string[] }>,
-  fileContents: Map<string, string>
+  fileContents: Map<string, string>,
+  prdRequirements: PRDRequirement[] = []
 ): string {
   const lines: string[] = [];
 
@@ -303,6 +373,19 @@ function generateXMLContext(
   lines.push('<context>');
   lines.push(`  <query>${escapeXML(query)}</query>`);
   lines.push('');
+
+  // PRD Requirements (first, as they provide context for what to build)
+  if (prdRequirements.length > 0) {
+    lines.push('  <requirements>');
+    for (const req of prdRequirements) {
+      lines.push(`    <requirement priority="${req.priority}" match="${(req.score * 100).toFixed(0)}%">`);
+      lines.push(`      <id>${escapeXML(req.id)}</id>`);
+      lines.push(`      <text>${escapeXML(req.text)}</text>`);
+      lines.push('    </requirement>');
+    }
+    lines.push('  </requirements>');
+    lines.push('');
+  }
 
   // Code chunks
   lines.push('  <relevant_code>');
@@ -362,12 +445,20 @@ function generateJSONContext(
   chunks: VectorSearchResult<CodeChunkPayload>[],
   symbols: SymbolNode[],
   relationships: Map<string, { callers: string[]; callees: string[] }>,
-  fileContents: Map<string, string>
+  fileContents: Map<string, string>,
+  prdRequirements: PRDRequirement[] = []
 ): string {
   const context = {
     query,
     generated: new Date().toISOString(),
     generator: 'cv-git',
+    requirements: prdRequirements.map(req => ({
+      id: req.id,
+      text: req.text,
+      priority: req.priority,
+      prdId: req.prdId,
+      matchScore: req.score
+    })),
     chunks: chunks.map(chunk => ({
       file: chunk.payload.file,
       lines: `${chunk.payload.startLine}-${chunk.payload.endLine}`,

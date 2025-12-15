@@ -38,7 +38,11 @@ export function initCommand(): Command {
     .option('--name <name>', 'Repository/workspace name (defaults to directory name)')
     .option('--workspace', 'Force workspace mode (multi-repo)')
     .option('--repo', 'Force single-repo mode')
-    .option('--skip-preferences', 'Skip preference picker (for developers testing all providers)');
+    .option('--skip-preferences', 'Skip preference picker (for developers testing all providers)')
+    .option('-y, --yes', 'Non-interactive mode with defaults (for AI/automation)')
+    .option('--platform <platform>', 'Git platform: github, gitlab, bitbucket (default: github)')
+    .option('--ai-provider <provider>', 'AI provider: anthropic, openai, openrouter (default: anthropic)')
+    .option('--embedding-provider <provider>', 'Embedding provider: openai, openrouter (default: openrouter)');
 
   addGlobalOptions(cmd);
 
@@ -55,16 +59,28 @@ export function initCommand(): Command {
         let preferences: PreferenceChoices;
         const skipPrefs = options.skipPreferences === true;
 
-        if (skipPrefs) {
-          // Developer mode - skip preferences entirely
-          console.log(chalk.gray('Skipping preferences (developer mode)'));
-          console.log();
+        // Non-interactive mode: -y/--yes, --json, or --skip-preferences
+        const nonInteractive = options.yes || output.isJson || skipPrefs;
+
+        if (nonInteractive) {
+          // Non-interactive mode - use defaults or explicit options
+          if (!output.isJson && !skipPrefs) {
+            console.log(chalk.gray('Running in non-interactive mode with defaults'));
+            console.log();
+          } else if (skipPrefs) {
+            console.log(chalk.gray('Skipping preferences (developer mode)'));
+            console.log();
+          }
           preferences = {
-            gitPlatform: 'github',
-            aiProvider: 'anthropic',
-            embeddingProvider: 'openrouter',
+            gitPlatform: (options.platform || 'github') as 'github' | 'gitlab' | 'bitbucket',
+            aiProvider: (options.aiProvider || 'anthropic') as 'anthropic' | 'openai' | 'openrouter',
+            embeddingProvider: (options.embeddingProvider || 'openrouter') as 'openai' | 'openrouter',
           };
-        } else if (!hasPrefs && !output.isJson) {
+          // Save preferences in non-interactive mode too
+          if (!hasPrefs) {
+            await savePreferences(preferences);
+          }
+        } else if (!hasPrefs) {
           // First-time setup - run preference picker
           preferences = await runPreferencePicker();
           displayPreferenceSummary(preferences);
@@ -126,40 +142,47 @@ export function initCommand(): Command {
         } else if (options.repo) {
           mode = 'repo';
         } else if (detected.type === 'workspace' && detected.childRepos && detected.childRepos.length > 0) {
-          // Found child git repos - ask user
-          spinner.stop();
-          console.log();
-          console.log(chalk.cyan(`Found ${detected.childRepos.length} git repositories in this directory:`));
-          for (const repo of detected.childRepos) {
-            console.log(chalk.gray(`  - ${repo.name}/`));
+          // Found child git repos
+          if (nonInteractive) {
+            // In non-interactive mode, default to workspace mode
+            mode = 'workspace';
+            spinner.text = 'Initializing CV-Git workspace (non-interactive)...';
+          } else {
+            // Ask user
+            spinner.stop();
+            console.log();
+            console.log(chalk.cyan(`Found ${detected.childRepos.length} git repositories in this directory:`));
+            for (const repo of detected.childRepos) {
+              console.log(chalk.gray(`  - ${repo.name}/`));
+            }
+            console.log();
+
+            const { initMode } = await inquirer.prompt([
+              {
+                type: 'list',
+                name: 'initMode',
+                message: 'How would you like to initialize CV-Git?',
+                choices: [
+                  {
+                    name: `Workspace mode - Create unified index across all ${detected.childRepos.length} repos`,
+                    value: 'workspace',
+                  },
+                  {
+                    name: 'Skip - Initialize individual repos separately',
+                    value: 'skip',
+                  },
+                ],
+              },
+            ]);
+
+            if (initMode === 'skip') {
+              console.log(chalk.gray('\nTo initialize a single repo, cd into it and run `cv init`'));
+              return;
+            }
+
+            mode = initMode;
+            spinner.start('Initializing CV-Git workspace...');
           }
-          console.log();
-
-          const { initMode } = await inquirer.prompt([
-            {
-              type: 'list',
-              name: 'initMode',
-              message: 'How would you like to initialize CV-Git?',
-              choices: [
-                {
-                  name: `Workspace mode - Create unified index across all ${detected.childRepos.length} repos`,
-                  value: 'workspace',
-                },
-                {
-                  name: 'Skip - Initialize individual repos separately',
-                  value: 'skip',
-                },
-              ],
-            },
-          ]);
-
-          if (initMode === 'skip') {
-            console.log(chalk.gray('\nTo initialize a single repo, cd into it and run `cv init`'));
-            return;
-          }
-
-          mode = initMode;
-          spinner.start('Initializing CV-Git workspace...');
         } else if (detected.type === 'repo') {
           mode = 'repo';
         } else {
@@ -208,23 +231,26 @@ export function initCommand(): Command {
             }
             console.log();
 
-            const { setupMissing } = await inquirer.prompt([
-              {
-                type: 'confirm',
-                name: 'setupMissing',
-                message: 'Set up missing credentials now?',
-                default: true,
-              },
-            ]);
+            // Skip credential setup prompt in non-interactive mode
+            if (!nonInteractive) {
+              const { setupMissing } = await inquirer.prompt([
+                {
+                  type: 'confirm',
+                  name: 'setupMissing',
+                  message: 'Set up missing credentials now?',
+                  default: true,
+                },
+              ]);
 
-            if (setupMissing) {
-              console.log();
-              for (const service of credentialStatus.missing) {
-                const { execSync } = await import('child_process');
-                try {
-                  execSync(`cv auth setup ${service}`, { stdio: 'inherit' });
-                } catch {
-                  console.log(chalk.yellow(`Skipped ${service}. Run 'cv auth setup ${service}' later.`));
+              if (setupMissing) {
+                console.log();
+                for (const service of credentialStatus.missing) {
+                  const { execSync } = await import('child_process');
+                  try {
+                    execSync(`cv auth setup ${service}`, { stdio: 'inherit' });
+                  } catch {
+                    console.log(chalk.yellow(`Skipped ${service}. Run 'cv auth setup ${service}' later.`));
+                  }
                 }
               }
             }

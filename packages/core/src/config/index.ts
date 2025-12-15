@@ -5,7 +5,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { CVConfig, ConfigError } from '@cv-git/shared';
-import { getCVDir, ensureDir } from '@cv-git/shared';
+import { getCVDir, ensureDir, loadSharedCredentials } from '@cv-git/shared';
 
 const DEFAULT_CONFIG: CVConfig = {
   version: '0.1.0',
@@ -200,8 +200,9 @@ export class ConfigManager {
 
   /**
    * Get API key for a service
+   * Checks: repo config > shared ControlVector credentials > environment variables
    */
-  getApiKey(service: 'anthropic' | 'openai'): string {
+  getApiKey(service: 'anthropic' | 'openai' | 'openrouter'): string {
     const config = this.get();
 
     if (service === 'anthropic') {
@@ -216,6 +217,47 @@ export class ConfigManager {
       const key = config.embedding.apiKey || process.env.CV_OPENAI_KEY || process.env.OPENAI_API_KEY;
       if (!key) {
         throw new ConfigError('OpenAI API key not configured. Set CV_OPENAI_KEY env var or run `cv config set embedding.apiKey <key>`');
+      }
+      return key;
+    }
+
+    if (service === 'openrouter') {
+      const key = config.embedding.apiKey || process.env.CV_OPENROUTER_KEY || process.env.OPENROUTER_API_KEY;
+      if (!key) {
+        throw new ConfigError('OpenRouter API key not configured. Set CV_OPENROUTER_KEY env var or run `cv config set embedding.apiKey <key>`');
+      }
+      return key;
+    }
+
+    throw new ConfigError(`Unknown service: ${service}`);
+  }
+
+  /**
+   * Get API key for a service (async version that checks shared credentials)
+   * Priority: repo config > shared ControlVector credentials > environment variables
+   */
+  async getApiKeyAsync(service: 'anthropic' | 'openai' | 'openrouter'): Promise<string> {
+    const config = this.get();
+    const sharedCreds = await loadSharedCredentials();
+
+    if (service === 'anthropic') {
+      const key = config.llm.apiKey
+        || sharedCreds.anthropic_key
+        || process.env.CV_ANTHROPIC_KEY
+        || process.env.ANTHROPIC_API_KEY;
+      if (!key) {
+        throw new ConfigError('Anthropic API key not configured. Set in cvPRD Settings or run `cv config set llm.apiKey <key>`');
+      }
+      return key;
+    }
+
+    if (service === 'openai' || service === 'openrouter') {
+      const key = config.embedding.apiKey
+        || sharedCreds.openrouter_key
+        || process.env.CV_OPENROUTER_KEY
+        || process.env.OPENROUTER_API_KEY;
+      if (!key) {
+        throw new ConfigError('OpenRouter API key not configured. Set in cvPRD Settings or run `cv config set embedding.apiKey <key>`');
       }
       return key;
     }

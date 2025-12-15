@@ -383,3 +383,84 @@ export function generateDatabaseName(name: string): string {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 }
+
+// ========== Shared ControlVector Credentials ==========
+
+/**
+ * Path to shared ControlVector credentials file
+ * Used by both cv-git and cv-prd for token sharing
+ */
+export function getSharedCredentialsPath(): string {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  return path.join(home, '.controlvector', 'credentials.json');
+}
+
+/**
+ * Shared credentials structure
+ */
+export interface SharedCredentials {
+  openrouter_key?: string;
+  anthropic_key?: string;
+  figma_token?: string;
+  github_token?: string;
+}
+
+/**
+ * Load shared ControlVector credentials
+ * Returns credentials from ~/.controlvector/credentials.json
+ */
+export async function loadSharedCredentials(): Promise<SharedCredentials> {
+  const credPath = getSharedCredentialsPath();
+  try {
+    const data = await fs.readFile(credPath, 'utf-8');
+    return JSON.parse(data) as SharedCredentials;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save shared ControlVector credentials
+ * Saves to ~/.controlvector/credentials.json
+ */
+export async function saveSharedCredentials(creds: SharedCredentials): Promise<void> {
+  const credPath = getSharedCredentialsPath();
+  const dir = path.dirname(credPath);
+
+  // Ensure directory exists
+  await ensureDir(dir);
+
+  // Merge with existing credentials
+  const existing = await loadSharedCredentials();
+  const merged = { ...existing, ...creds };
+
+  await fs.writeFile(credPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+}
+
+/**
+ * Get API key from shared credentials or environment
+ * Priority: shared credentials > environment variables
+ */
+export async function getApiKey(
+  service: 'openrouter' | 'anthropic' | 'github' | 'figma'
+): Promise<string | undefined> {
+  const creds = await loadSharedCredentials();
+
+  switch (service) {
+    case 'openrouter':
+      return creds.openrouter_key
+        || process.env.CV_OPENROUTER_KEY
+        || process.env.OPENROUTER_API_KEY;
+    case 'anthropic':
+      return creds.anthropic_key
+        || process.env.CV_ANTHROPIC_KEY
+        || process.env.ANTHROPIC_API_KEY;
+    case 'github':
+      return creds.github_token
+        || process.env.GITHUB_TOKEN
+        || process.env.GH_TOKEN;
+    case 'figma':
+      return creds.figma_token
+        || process.env.FIGMA_API_TOKEN;
+  }
+}

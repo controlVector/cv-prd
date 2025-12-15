@@ -1,14 +1,20 @@
 /**
  * cv push command
  * Git push with automatic knowledge graph sync
+ *
+ * Uses stored GitHub/GitLab credentials for authentication
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { spawn, spawnSync } from 'child_process';
+import { spawn, spawnSync, execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { findRepoRoot } from '@cv-git/shared';
 import { addGlobalOptions, createOutput } from '../utils/output.js';
+import { CredentialManager, CredentialType, GitPlatform } from '@cv-git/credentials';
 
 interface PushOptions {
   skipSync?: boolean;
@@ -94,6 +100,84 @@ export function pushCommand(): Command {
 }
 
 /**
+ * Detect git platform from remote URL
+ */
+function detectPlatform(remoteUrl: string): GitPlatform | null {
+  if (remoteUrl.includes('github.com')) return GitPlatform.GITHUB;
+  if (remoteUrl.includes('gitlab.com')) return GitPlatform.GITLAB;
+  if (remoteUrl.includes('bitbucket.org')) return GitPlatform.BITBUCKET;
+  return null;
+}
+
+/**
+ * Get remote URL for a given remote name
+ */
+function getRemoteUrl(remote: string = 'origin'): string | null {
+  try {
+    return execSync(`git remote get-url ${remote}`, { encoding: 'utf-8' }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get stored credential for a platform
+ */
+async function getCredentialForPlatform(platform: GitPlatform): Promise<{ username: string; token: string } | null> {
+  const credentials = new CredentialManager();
+  await credentials.init();
+
+  // List all credentials and find one for this platform
+  const all = await credentials.list();
+  const gitCred = all.find(c =>
+    c.type === CredentialType.GIT_PLATFORM_TOKEN &&
+    c.metadata?.platform === platform
+  );
+
+  if (!gitCred) return null;
+
+  // Retrieve the full credential
+  const full = await credentials.retrieve(gitCred.type, gitCred.name);
+  if (!full || !('token' in full) || !('username' in full)) return null;
+
+  return {
+    username: (full as any).username,
+    token: (full as any).token
+  };
+}
+
+/**
+ * Create a GIT_ASKPASS helper script that provides credentials
+ */
+function createAskPassScript(username: string, token: string): string {
+  const tmpDir = os.tmpdir();
+  const scriptPath = path.join(tmpDir, `cv-git-askpass-${process.pid}.sh`);
+
+  // Script that returns token for password prompts, username for username prompts
+  const script = `#!/bin/bash
+if [[ "$1" == *"Username"* ]]; then
+  echo "${username}"
+elif [[ "$1" == *"Password"* ]] || [[ "$1" == *"token"* ]]; then
+  echo "${token}"
+fi
+`;
+
+  fs.writeFileSync(scriptPath, script, { mode: 0o700 });
+  return scriptPath;
+}
+
+/**
+ * Clean up the askpass script
+ */
+function cleanupAskPassScript(scriptPath: string): void {
+  try {
+    fs.unlinkSync(scriptPath);
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+/**
  * Run git push with passthrough arguments
  */
 async function gitPush(
@@ -102,6 +186,29 @@ async function gitPush(
   options: PushOptions,
   extraArgs: string[]
 ): Promise<void> {
+  const remoteName = remote || 'origin';
+
+  // Get remote URL and detect platform
+  const remoteUrl = getRemoteUrl(remoteName);
+  let askPassScript: string | null = null;
+  let env = { ...process.env };
+
+  if (remoteUrl && remoteUrl.startsWith('https://')) {
+    const platform = detectPlatform(remoteUrl);
+    if (platform) {
+      const cred = await getCredentialForPlatform(platform);
+      if (cred) {
+        // Create askpass script for authentication
+        askPassScript = createAskPassScript(cred.username, cred.token);
+        env = {
+          ...env,
+          GIT_ASKPASS: askPassScript,
+          GIT_TERMINAL_PROMPT: '0'  // Disable interactive prompts
+        };
+      }
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const args = ['push'];
 
@@ -123,6 +230,7 @@ async function gitPush(
 
     const git = spawn('git', args, {
       stdio: ['inherit', 'pipe', 'pipe'],
+      env
     });
 
     let stdout = '';
@@ -137,6 +245,11 @@ async function gitPush(
     });
 
     git.on('close', (code) => {
+      // Clean up askpass script
+      if (askPassScript) {
+        cleanupAskPassScript(askPassScript);
+      }
+
       if (code === 0) {
         resolve();
       } else {
@@ -145,6 +258,10 @@ async function gitPush(
     });
 
     git.on('error', (error) => {
+      // Clean up askpass script
+      if (askPassScript) {
+        cleanupAskPassScript(askPassScript);
+      }
       reject(error);
     });
   });

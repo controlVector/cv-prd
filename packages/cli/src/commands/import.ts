@@ -79,9 +79,9 @@ export function importCommand(): Command {
   const cmd = new Command('import');
 
   cmd
-    .description('Import PRD data from cv-prd export')
-    .argument('<path>', 'Path to .cv export directory or zip file')
-    .option('--no-vectors', 'Skip importing vector embeddings')
+    .description('Import PRD data from cv-prd export (.cvx file)')
+    .argument('<path>', 'Path to .cvx file or export directory')
+    .option('--no-vectors', 'Skip generating vector embeddings')
     .option('--replace', 'Replace existing PRD data (default: merge)');
 
   addGlobalOptions(cmd);
@@ -102,27 +102,45 @@ export function importCommand(): Command {
       // Resolve import path
       const absolutePath = path.resolve(importPath);
 
-      // Check if it's a zip file or directory
+      // Check if it's a .cvx/.zip file or directory
       let exportDir = absolutePath;
       const stats = await fs.stat(absolutePath);
 
-      if (stats.isFile() && absolutePath.endsWith('.zip')) {
-        // Extract zip file
-        spinner.text = 'Extracting zip file...';
-        const extractDir = path.join(path.dirname(absolutePath), path.basename(absolutePath, '.zip'));
+      if (stats.isFile() && (absolutePath.endsWith('.cvx') || absolutePath.endsWith('.zip'))) {
+        // Extract cvx/zip file (both are zip archives)
+        spinner.text = 'Extracting .cvx package...';
+        const ext = absolutePath.endsWith('.cvx') ? '.cvx' : '.zip';
+        const extractDir = path.join(path.dirname(absolutePath), path.basename(absolutePath, ext));
         await extractZip(absolutePath, extractDir);
         exportDir = extractDir;
       }
 
-      // Read manifest
+      // Read manifest - may be in exportDir or in a subdirectory
       spinner.text = 'Reading export manifest...';
-      const manifestPath = path.join(exportDir, 'manifest.json');
+      let manifestPath = path.join(exportDir, 'manifest.json');
 
       try {
         await fs.access(manifestPath);
       } catch {
-        spinner.fail(chalk.red('Invalid export: manifest.json not found'));
-        process.exit(1);
+        // Check if manifest is in a subdirectory (common with zip extraction)
+        const entries = await fs.readdir(exportDir);
+        let foundInSubdir = false;
+        for (const entry of entries) {
+          const subManifest = path.join(exportDir, entry, 'manifest.json');
+          try {
+            await fs.access(subManifest);
+            exportDir = path.join(exportDir, entry);
+            manifestPath = subManifest;
+            foundInSubdir = true;
+            break;
+          } catch {
+            continue;
+          }
+        }
+        if (!foundInSubdir) {
+          spinner.fail(chalk.red('Invalid export: manifest.json not found'));
+          process.exit(1);
+        }
       }
 
       const manifestContent = await fs.readFile(manifestPath, 'utf-8');
@@ -229,9 +247,9 @@ export function importCommand(): Command {
       }
       spinner.succeed(`Imported ${linkCount} implementation links`);
 
-      // Import vectors if available and requested
-      if (options.vectors && manifest.stats.vectors > 0) {
-        spinner = output.spinner('Importing vector embeddings...').start();
+      // Import or generate vectors
+      if (options.vectors) {
+        spinner = output.spinner('Setting up vector embeddings...').start();
 
         try {
           const embeddingCreds = await getEmbeddingCredentials({
@@ -248,29 +266,77 @@ export function importCommand(): Command {
 
           await vector.connect();
 
-          const vectorsPath = path.join(exportDir, 'vectors', 'prds.jsonl');
-          const vectors = await readJsonl<VectorEntry>(vectorsPath);
+          // Ensure prd_chunks collection exists
+          await vector.ensureCollection('prd_chunks', 1536);
 
-          // Ensure collection exists
-          const dimensions = vectors[0]?.embedding?.length || 1536;
-          await vector.ensureCollection('prds', dimensions);
+          if (manifest.stats.vectors > 0) {
+            // Import pre-computed vectors from export
+            spinner.text = 'Importing pre-computed vector embeddings...';
+            const vectorsPath = path.join(exportDir, 'vectors', 'prds.jsonl');
+            const vectors = await readJsonl<VectorEntry>(vectorsPath);
 
-          // Batch upsert
-          const points = vectors.map(v => ({
-            id: v.id,
-            vector: v.embedding,
-            payload: {
-              text: v.text,
-              ...v.metadata
+            const dimensions = vectors[0]?.embedding?.length || 1536;
+            await vector.ensureCollection('prd_chunks', dimensions);
+
+            const points = vectors.map(v => ({
+              id: v.id,
+              vector: v.embedding,
+              payload: {
+                text: v.text,
+                ...v.metadata
+              }
+            }));
+
+            await vector.upsertBatch('prd_chunks', points);
+            spinner.succeed(`Imported ${vectors.length} pre-computed vector embeddings`);
+          } else if (chunkNodes.length > 0) {
+            // Generate embeddings for chunks that don't have vectors
+            spinner.text = `Generating embeddings for ${chunkNodes.length} requirement chunks...`;
+
+            let embeddedCount = 0;
+            const batchSize = 10;
+
+            for (let i = 0; i < chunkNodes.length; i += batchSize) {
+              const batch = chunkNodes.slice(i, i + batchSize);
+
+              for (const chunk of batch) {
+                try {
+                  const chunkId = chunk.id.replace('chunk:', '');
+
+                  // Generate embedding for chunk text
+                  const embedding = await vector.embed(chunk.text);
+
+                  // Store in prd_chunks collection
+                  await vector.upsert('prd_chunks', chunkId, embedding, {
+                    text: chunk.text,
+                    prd_id: chunk.prd_id,
+                    chunk_type: chunk.chunk_type,
+                    priority: chunk.priority || 'medium',
+                    tags: chunk.tags || [],
+                    type: 'requirement'
+                  });
+
+                  embeddedCount++;
+                  spinner.text = `Generating embeddings... ${embeddedCount}/${chunkNodes.length}`;
+                } catch (embedError: any) {
+                  if (output.isVerbose) {
+                    console.warn(chalk.yellow(`  Warning: Could not embed chunk ${chunk.id}: ${embedError.message}`));
+                  }
+                }
+              }
             }
-          }));
 
-          await vector.upsertBatch('prds', points);
+            spinner.succeed(`Generated embeddings for ${embeddedCount} requirement chunks`);
+          } else {
+            spinner.succeed('No chunks to embed');
+          }
+
           await vector.close();
-
-          spinner.succeed(`Imported ${vectors.length} vector embeddings`);
         } catch (error: any) {
-          spinner.warn(`Could not import vectors: ${error.message}`);
+          spinner.warn(`Could not set up vectors: ${error.message}`);
+          if (output.isVerbose) {
+            console.error(chalk.gray(error.stack));
+          }
         }
       }
 
