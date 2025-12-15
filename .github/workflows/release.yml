@@ -79,7 +79,7 @@ jobs:
         run: |
           mkdir -p ../src-tauri/binaries
           pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
-          mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cv-prd-backend-x86_64-unknown-linux-gnu
+          mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cvprd-backend-x86_64-unknown-linux-gnu
 
       - name: Build Python backend (Windows)
         if: matrix.platform == 'windows-latest'
@@ -88,7 +88,7 @@ jobs:
         run: |
           mkdir -p ../src-tauri/binaries
           pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
-          mv ../src-tauri/binaries/cvprd-backend.exe ../src-tauri/binaries/cv-prd-backend-x86_64-pc-windows-msvc.exe
+          mv ../src-tauri/binaries/cvprd-backend.exe ../src-tauri/binaries/cvprd-backend-x86_64-pc-windows-msvc.exe
 
       - name: Build Python backend (macOS x86_64)
         if: matrix.platform == 'macos-latest' && matrix.rust_target == 'x86_64-apple-darwin'
@@ -96,7 +96,7 @@ jobs:
         run: |
           mkdir -p ../src-tauri/binaries
           pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
-          mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cv-prd-backend-x86_64-apple-darwin
+          mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cvprd-backend-x86_64-apple-darwin
 
       - name: Build Python backend (macOS ARM)
         if: matrix.platform == 'macos-latest' && matrix.rust_target == 'aarch64-apple-darwin'
@@ -104,7 +104,7 @@ jobs:
         run: |
           mkdir -p ../src-tauri/binaries
           pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
-          mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cv-prd-backend-aarch64-apple-darwin
+          mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cvprd-backend-aarch64-apple-darwin
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
