@@ -12,9 +12,34 @@ import { spawn, spawnSync, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { findRepoRoot } from '@cv-git/shared';
 import { addGlobalOptions, createOutput } from '../utils/output.js';
 import { CredentialManager, CredentialType, GitPlatform } from '@cv-git/credentials';
+
+/**
+ * Find git repository root (works with any git repo, not just CV-initialized)
+ */
+function findGitRoot(startDir: string = process.cwd()): string | null {
+  let currentDir = path.resolve(startDir);
+  const root = path.parse(currentDir).root;
+
+  while (currentDir !== root) {
+    const gitDir = path.join(currentDir, '.git');
+    if (fs.existsSync(gitDir)) {
+      return currentDir;
+    }
+    currentDir = path.dirname(currentDir);
+  }
+
+  return null;
+}
+
+/**
+ * Check if CV is initialized in a git repo
+ */
+function isCVInitialized(repoRoot: string): boolean {
+  const cvConfigPath = path.join(repoRoot, '.cv', 'config.json');
+  return fs.existsSync(cvConfigPath);
+}
 
 interface PushOptions {
   skipSync?: boolean;
@@ -42,11 +67,14 @@ export function pushCommand(): Command {
     const output = createOutput(options as any);
 
     try {
-      const repoRoot = await findRepoRoot();
+      const repoRoot = findGitRoot();
       if (!repoRoot) {
         console.error(chalk.red('Not in a git repository'));
         process.exit(1);
       }
+
+      // Check if CV is initialized
+      const cvInitialized = isCVInitialized(repoRoot);
 
       // Step 1: Git push (unless sync-only)
       if (!options.syncOnly) {
@@ -62,8 +90,8 @@ export function pushCommand(): Command {
         }
       }
 
-      // Step 2: Sync knowledge graph (unless skip-sync)
-      if (!options.skipSync) {
+      // Step 2: Sync knowledge graph (unless skip-sync or CV not initialized)
+      if (!options.skipSync && cvInitialized) {
         const syncSpinner = ora('Syncing knowledge graph...').start();
 
         try {
