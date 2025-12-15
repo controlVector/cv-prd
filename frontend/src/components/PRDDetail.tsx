@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getPRD, optimizePRD } from '../services/api'
 import { downloadMarkdown, copyMarkdownToClipboard } from '../utils/markdown-export'
+import { MarkdownViewer } from './MarkdownViewer'
 
 interface PRDDetailProps {
   prdId: string
@@ -14,6 +15,7 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizationResult, setOptimizationResult] = useState<any>(null)
   const [copySuccess, setCopySuccess] = useState(false)
+  const [showViewer, setShowViewer] = useState(false)
 
   useEffect(() => {
     loadPRD()
@@ -113,6 +115,13 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
         <button onClick={onBack} className="btn-secondary">← Back to List</button>
         <div className="prd-detail-actions">
           <button
+            onClick={() => setShowViewer(true)}
+            className="btn-secondary"
+            title="Preview as rendered Markdown"
+          >
+            📝 Preview
+          </button>
+          <button
             onClick={handleCopyMarkdown}
             className="btn-secondary"
             title="Copy as Markdown"
@@ -131,10 +140,17 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
             disabled={isOptimizing}
             className="btn-primary"
           >
-            {isOptimizing ? 'Optimizing...' : '🤖 Optimize for AI Paired Programming'}
+            {isOptimizing ? 'Optimizing...' : '🤖 Optimize for AI'}
           </button>
         </div>
       </div>
+
+      {showViewer && prdData && (
+        <MarkdownViewer
+          prd={prdData}
+          onClose={() => setShowViewer(false)}
+        />
+      )}
 
       <div className="prd-document">
         <div className="prd-document-header">

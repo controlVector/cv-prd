@@ -9,8 +9,11 @@ import sys
 import uvicorn
 from pathlib import Path
 
-# Add the app directory to the path
+# Add the app directory to the path for development
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Import app directly so PyInstaller bundles it
+from app.main import app as fastapi_app
 
 def main():
     """Main entry point for the standalone server"""
@@ -27,9 +30,9 @@ def main():
     print(f"Database: {os.environ.get('DATABASE_URL', 'Not configured')}")
     print(f"Qdrant: {os.environ.get('QDRANT_HOST', 'localhost')}:{os.environ.get('QDRANT_PORT', '6333')}")
 
-    # Start the server
+    # Start the server - use app object directly for PyInstaller compatibility
     uvicorn.run(
-        "app.main:app",
+        fastapi_app,
         host=host,
         port=port,
         log_config=log_config,

@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+          - platform: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+          - platform: macos-latest
+            rust_target: x86_64-apple-darwin
+          - platform: macos-latest
+            rust_target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Python backend (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          mkdir -p src-tauri/binaries
+          pyinstaller cv-prd-backend.spec --distpath src-tauri/binaries --clean -y
+          mv src-tauri/binaries/cv-prd-backend src-tauri/binaries/cv-prd-backend-x86_64-unknown-linux-gnu
+
+      - name: Build Python backend (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          pyinstaller cv-prd-backend.spec --distpath src-tauri/binaries --clean -y
+          mv src-tauri/binaries/cv-prd-backend.exe src-tauri/binaries/cv-prd-backend-x86_64-pc-windows-msvc.exe
+
+      - name: Build Python backend (macOS x86_64)
+        if: matrix.platform == 'macos-latest' && matrix.rust_target == 'x86_64-apple-darwin'
+        run: |
+          mkdir -p src-tauri/binaries
+          pyinstaller cv-prd-backend.spec --distpath src-tauri/binaries --clean -y
+          mv src-tauri/binaries/cv-prd-backend src-tauri/binaries/cv-prd-backend-x86_64-apple-darwin
+
+      - name: Build Python backend (macOS ARM)
+        if: matrix.platform == 'macos-latest' && matrix.rust_target == 'aarch64-apple-darwin'
+        run: |
+          mkdir -p src-tauri/binaries
+          pyinstaller cv-prd-backend.spec --distpath src-tauri/binaries --clean -y
+          mv src-tauri/binaries/cv-prd-backend src-tauri/binaries/cv-prd-backend-aarch64-apple-darwin
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CV-PRD ${{ github.ref_name }}'
+          releaseBody: |
+            ## Installation
+
+            ### Linux
+            - `.deb` - For Debian/Ubuntu: `sudo dpkg -i cv-prd_*.deb`
+            - `.AppImage` - Universal: `chmod +x cv-prd_*.AppImage && ./cv-prd_*.AppImage`
+
+            ### Windows
+            - `.msi` - Windows installer
+
+            ### macOS
+            - `.dmg` - macOS disk image
+
+            ## Requirements
+            - Docker (for database services)
+
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.rust_target }}

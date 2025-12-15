@@ -56,6 +56,32 @@ body {
   width: auto;
 }
 
+.app-header-content {
+  flex: 1;
+}
+
+/* Settings button in header */
+.settings-button {
+  background: transparent;
+  border: 2px solid var(--cv-navy-lighter);
+  color: var(--cv-text-muted);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-size: 1.25rem;
+}
+
+.settings-button:hover {
+  border-color: var(--cv-orange);
+  color: var(--cv-orange);
+  background: rgba(245, 166, 35, 0.1);
+}
+
 .app-header-content h1 {
   font-size: 1.75rem;
   margin-bottom: 0.25rem;

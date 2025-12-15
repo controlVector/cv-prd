@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { listPRDs, optimizePRD } from '../services/api'
+import { listPRDs, optimizePRD, getPRD } from '../services/api'
 import { ExportDialog } from './ExportDialog'
+import { MarkdownViewer } from './MarkdownViewer'
 import type { PRDSummary } from '../types'
 
 interface PRDListProps {
@@ -13,6 +14,8 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
   const [error, setError] = useState<string | null>(null)
   const [optimizingPRD, setOptimizingPRD] = useState<string | null>(null)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [viewingPRD, setViewingPRD] = useState<any>(null)
+  const [loadingViewer, setLoadingViewer] = useState<string | null>(null)
 
   useEffect(() => {
     loadPRDs()
@@ -49,6 +52,18 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
     }
   }
 
+  const handleViewMarkdown = async (prdId: string) => {
+    setLoadingViewer(prdId)
+    try {
+      const prdData = await getPRD(prdId)
+      setViewingPRD(prdData)
+    } catch (err: any) {
+      alert(`Failed to load PRD: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setLoadingViewer(null)
+    }
+  }
+
   if (isLoading) {
     return <div className="loading">Loading PRDs...</div>
   }
@@ -81,6 +96,13 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
         prds={prds}
       />
 
+      {viewingPRD && (
+        <MarkdownViewer
+          prd={viewingPRD}
+          onClose={() => setViewingPRD(null)}
+        />
+      )}
+
       {prds.length === 0 ? (
         <p className="empty-state">
           No PRDs yet. Create your first PRD to get started!
@@ -105,13 +127,24 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
+                    handleViewMarkdown(prd.id)
+                  }}
+                  disabled={loadingViewer === prd.id}
+                  className="btn-secondary"
+                  style={{ marginTop: '10px' }}
+                >
+                  {loadingViewer === prd.id ? 'Loading...' : '📝 View Markdown'}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
                     handleOptimize(prd.id, prd.name)
                   }}
                   disabled={optimizingPRD === prd.id}
                   className="btn-primary"
                   style={{ marginTop: '10px' }}
                 >
-                  {optimizingPRD === prd.id ? 'Optimizing...' : '🤖 Optimize for AI Paired Programming'}
+                  {optimizingPRD === prd.id ? 'Optimizing...' : '🤖 Optimize for AI'}
                 </button>
               </div>
             </div>

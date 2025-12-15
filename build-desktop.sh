@@ -1,133 +1,85 @@
 #!/bin/bash
+# Build script for CV-PRD desktop application
+# Builds Python backend with PyInstaller, then builds Tauri app
 
-# Build script for cvPRD Desktop Application
-# This script builds all components and packages them into an Electron app
+set -e
 
-set -e  # Exit on error
-
-echo "=============================================="
-echo "Building cvPRD Desktop Application"
-echo "=============================================="
-
-# Colors for output
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Get the directory of the script
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Step 1: Build Frontend
-echo -e "\n${BLUE}Step 1/4: Building React Frontend${NC}"
+echo "=== CV-PRD Desktop Build ==="
+
+# Detect platform
+case "$(uname -s)" in
+    Linux*)     PLATFORM=linux;;
+    Darwin*)    PLATFORM=macos;;
+    MINGW*|MSYS*|CYGWIN*) PLATFORM=windows;;
+    *)          PLATFORM=unknown;;
+esac
+
+echo "Platform: $PLATFORM"
+
+# Step 1: Build frontend
+echo ""
+echo "=== Building Frontend ==="
 cd frontend
-if [ ! -d "node_modules" ]; then
-    echo "Installing frontend dependencies..."
-    npm install
-fi
-echo "Building frontend..."
+npm install
 npm run build
+cd ..
 
-# Copy frontend build to electron directory
-echo "Copying frontend build to electron directory..."
-rm -rf ../electron/frontend-dist
-cp -r dist ../electron/frontend-dist
-echo -e "${GREEN}✓ Frontend built successfully${NC}"
+# Step 2: Build Python backend with PyInstaller
+echo ""
+echo "=== Building Python Backend ==="
 
-# Step 2: Build Backend
-echo -e "\n${BLUE}Step 2/4: Building Python Backend${NC}"
-cd ../backend
-
-# Check if venv exists
+# Create virtual environment if needed
 if [ ! -d "venv" ]; then
-    echo "Creating Python virtual environment..."
     python3 -m venv venv
 fi
 
-# Activate venv
 source venv/bin/activate
 
 # Install dependencies
-echo "Installing backend dependencies..."
-pip install -q -r requirements.txt
+pip install -r requirements.txt
+pip install pyinstaller
 
-# Install PyInstaller if not available
-if ! pip show pyinstaller >/dev/null 2>&1; then
-    echo "Installing PyInstaller..."
-    pip install pyinstaller
-fi
+# Create binaries directory
+mkdir -p src-tauri/binaries
 
 # Build backend executable
-echo "Building backend executable with PyInstaller..."
-python build_backend.py
+pyinstaller cv-prd-backend.spec --distpath src-tauri/binaries --clean -y
 
-echo -e "${GREEN}✓ Backend built successfully${NC}"
-
-# Step 3: Prepare Electron App
-echo -e "\n${BLUE}Step 3/4: Preparing Electron App${NC}"
-cd ../electron
-
-# Install electron dependencies
-if [ ! -d "node_modules" ]; then
-    echo "Installing Electron dependencies..."
-    npm install
-fi
-
-# Create resources directory if it doesn't exist
-mkdir -p resources/databases/qdrant
-
-# Note: In production, you would download portable Qdrant here
-echo "Note: Using system Qdrant in development mode"
-echo "For production, download portable Qdrant binary"
-
-echo -e "${GREEN}✓ Electron app prepared${NC}"
-
-# Step 4: Package Application
-echo -e "\n${BLUE}Step 4/4: Packaging Desktop Application${NC}"
-
-# Determine platform
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    PLATFORM="mac"
-elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
-    PLATFORM="win"
+# Rename based on platform (Tauri expects platform suffix)
+if [ "$PLATFORM" = "windows" ]; then
+    BACKEND_NAME="cv-prd-backend-x86_64-pc-windows-msvc.exe"
+elif [ "$PLATFORM" = "macos" ]; then
+    if [ "$(uname -m)" = "arm64" ]; then
+        BACKEND_NAME="cv-prd-backend-aarch64-apple-darwin"
+    else
+        BACKEND_NAME="cv-prd-backend-x86_64-apple-darwin"
+    fi
 else
-    PLATFORM="linux"
+    BACKEND_NAME="cv-prd-backend-x86_64-unknown-linux-gnu"
 fi
 
-echo "Building for platform: $PLATFORM"
+if [ -f "src-tauri/binaries/cv-prd-backend" ]; then
+    mv "src-tauri/binaries/cv-prd-backend" "src-tauri/binaries/$BACKEND_NAME"
+fi
 
-# Build based on flag
-if [ "$1" == "--dist" ]; then
-    echo "Creating distributable package..."
-    npm run dist
-    echo -e "${GREEN}✓ Distributable package created in electron/dist/${NC}"
-elif [ "$1" == "--pack" ]; then
-    echo "Creating unpacked distribution..."
-    npm run pack
-    echo -e "${GREEN}✓ Unpacked distribution created in electron/dist/${NC}"
-else
-    echo "Creating unpacked distribution for testing..."
-    npm run pack
-    echo -e "${GREEN}✓ Unpacked distribution created in electron/dist/${NC}"
+deactivate
+
+# Step 3: Build Tauri application
+echo ""
+echo "=== Building Tauri Application ==="
+export PATH="$HOME/.cargo/bin:$PATH"
+cargo tauri build
+
+echo ""
+echo "=== Build Complete ==="
+echo "Output files are in src-tauri/target/release/bundle/"
+
+# List output files
+if [ -d "src-tauri/target/release/bundle" ]; then
     echo ""
-    echo "To create a distributable installer, run: ./build-desktop.sh --dist"
+    echo "Generated packages:"
+    find src-tauri/target/release/bundle -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null
 fi
-
-echo ""
-echo "=============================================="
-echo -e "${GREEN}Build Complete!${NC}"
-echo "=============================================="
-echo ""
-echo "Output location: electron/dist/"
-echo ""
-
-if [ "$1" != "--dist" ]; then
-    echo "To test the application:"
-    echo "  cd electron && npm start"
-    echo ""
-    echo "To create installer packages:"
-    echo "  ./build-desktop.sh --dist"
-fi
-
-echo ""

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PRDSection, PRDResponse } from '../types'
 import { createPRD } from '../services/api'
+import './PRDForm.css'
 
 export function PRDForm() {
   const [name, setName] = useState('')
@@ -11,6 +12,16 @@ export function PRDForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<PRDResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // AI Generation state
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  // Figma integration state
+  const [figmaUrl, setFigmaUrl] = useState('')
+  const [isImportingFigma, setIsImportingFigma] = useState(false)
+  const [figmaError, setFigmaError] = useState<string | null>(null)
 
   const addSection = () => {
     setSections([
@@ -31,6 +42,100 @@ export function PRDForm() {
     const newSections = [...sections]
     newSections[index] = { ...newSections[index], [field]: value }
     setSections(newSections)
+  }
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return
+
+    setIsGenerating(true)
+    setAiError(null)
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/prds/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.detail || 'Failed to generate PRD')
+      }
+
+      const data = await response.json()
+
+      // Populate form with generated content
+      setName(data.name || '')
+      setDescription(data.description || '')
+      if (data.sections && data.sections.length > 0) {
+        const validPriorities = ['critical', 'high', 'medium', 'low']
+        setSections(data.sections.map((s: any) => {
+          // Normalize priority to lowercase and validate
+          const priority = (s.priority || 'medium').toLowerCase()
+          return {
+            title: s.title || '',
+            content: s.content || '',
+            priority: validPriorities.includes(priority) ? priority : 'medium',
+            tags: Array.isArray(s.tags) ? s.tags : []
+          }
+        }))
+      }
+
+      setAiPrompt('')
+    } catch (err: any) {
+      setAiError(err.message || 'Failed to generate PRD')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleFigmaImport = async () => {
+    if (!figmaUrl.trim()) return
+
+    setIsImportingFigma(true)
+    setFigmaError(null)
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/integrations/figma/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: figmaUrl })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.detail || 'Failed to import from Figma')
+      }
+
+      const data = await response.json()
+
+      // Add Figma content as sections
+      if (data.screens && data.screens.length > 0) {
+        const figmaSections = data.screens.map((screen: any) => ({
+          title: `UI: ${screen.name}`,
+          content: screen.description || `Screen: ${screen.name}\nComponents: ${screen.components?.join(', ') || 'None identified'}`,
+          priority: 'medium' as const,
+          tags: ['ui', 'figma', ...(screen.tags || [])]
+        }))
+        setSections([...sections.filter(s => s.title || s.content), ...figmaSections])
+      }
+
+      // Add workflow if present
+      if (data.workflow) {
+        setSections(prev => [...prev, {
+          title: 'User Workflow',
+          content: data.workflow,
+          priority: 'high' as const,
+          tags: ['workflow', 'figma', 'user-journey']
+        }])
+      }
+
+      setFigmaUrl('')
+    } catch (err: any) {
+      setFigmaError(err.message || 'Failed to import from Figma')
+    } finally {
+      setIsImportingFigma(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,6 +165,82 @@ export function PRDForm() {
   return (
     <div className="prd-form">
       <h2>Create New PRD</h2>
+
+      {/* AI Generation Panel */}
+      <div className="ai-generation-panel">
+        <div className="ai-header">
+          <span className="ai-icon">🤖</span>
+          <h3>AI PRD Generator</h3>
+        </div>
+        <p className="ai-description">
+          Describe your product or feature and let AI generate a structured PRD for you.
+        </p>
+
+        {aiError && <div className="error-message">{aiError}</div>}
+
+        <div className="ai-input-group">
+          <textarea
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="Example: Create a PRD for a mobile app that allows users to track their daily water intake, set reminders, and view weekly statistics. The app should integrate with Apple Health and Google Fit."
+            rows={4}
+            disabled={isGenerating}
+          />
+          <button
+            type="button"
+            onClick={handleAiGenerate}
+            disabled={!aiPrompt.trim() || isGenerating}
+            className="btn-primary ai-generate-btn"
+          >
+            {isGenerating ? (
+              <>
+                <span className="spinner"></span>
+                Generating...
+              </>
+            ) : (
+              <>Generate PRD</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Figma Integration Panel */}
+      <div className="figma-integration-panel">
+        <div className="figma-header">
+          <span className="figma-icon">🎨</span>
+          <h3>Import from Figma</h3>
+        </div>
+        <p className="figma-description">
+          Import screens, components, and user flows from your Figma designs.
+        </p>
+
+        {figmaError && <div className="error-message">{figmaError}</div>}
+
+        <div className="figma-input-group">
+          <input
+            type="text"
+            value={figmaUrl}
+            onChange={(e) => setFigmaUrl(e.target.value)}
+            placeholder="Paste Figma file or frame URL..."
+            disabled={isImportingFigma}
+          />
+          <button
+            type="button"
+            onClick={handleFigmaImport}
+            disabled={!figmaUrl.trim() || isImportingFigma}
+            className="btn-secondary figma-import-btn"
+          >
+            {isImportingFigma ? 'Importing...' : 'Import'}
+          </button>
+        </div>
+        <span className="figma-hint">
+          Requires Figma API token in Settings. Extracts screen names, components, and annotations.
+        </span>
+      </div>
+
+      <div className="divider">
+        <span>or fill in manually</span>
+      </div>
 
       {error && <div className="error-message">{error}</div>}
 

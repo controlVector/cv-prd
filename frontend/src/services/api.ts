@@ -7,14 +7,20 @@ import type {
   OptimizeResponse,
 } from '../types'
 
-// Detect if running in Electron
-const isElectron = () => {
-  return !!(window as any).electron
+// Detect if running in a desktop app (Electron or Tauri)
+const isDesktopApp = () => {
+  // Check for Electron
+  if ((window as any).electron) return true
+  // Check for Tauri
+  if ((window as any).__TAURI__) return true
+  // Check if served from tauri:// or file:// protocol
+  if (window.location.protocol === 'tauri:' || window.location.protocol === 'file:') return true
+  return false
 }
 
-// Use absolute URL when running in Electron desktop app
-const baseURL = isElectron()
-  ? 'http://localhost:8000/api/v1'
+// Use absolute URL when running in desktop app (Tauri or Electron)
+const baseURL = isDesktopApp()
+  ? 'http://127.0.0.1:8000/api/v1'
   : '/api/v1'
 
 const api = axios.create({

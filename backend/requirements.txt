@@ -16,9 +16,7 @@ qdrant-client>=1.7.0
 # neo4j>=5.14.1  # Deprecated - using FalkorDB now
 # FalkorDB uses the redis client (already in Caching section)
 
-# Embeddings
-sentence-transformers>=2.2.2
-torch>=2.2.0  # Updated for Python 3.12 support
+# Embeddings - using OpenRouter API (no local models needed)
 
 # Caching
 redis>=5.0.1

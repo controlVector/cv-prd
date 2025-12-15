@@ -4,13 +4,15 @@ import { SearchInterface } from './components/SearchInterface'
 import { PRDList } from './components/PRDList'
 import { PRDDetail } from './components/PRDDetail'
 import { DocumentUpload } from './components/DocumentUpload'
+import { Settings } from './components/Settings'
 import './App.css'
 
 function App() {
   const [activeTab, setActiveTab] = useState<'create' | 'upload' | 'search' | 'list'>(
-    'list'
+    'create'
   )
   const [selectedPRD, setSelectedPRD] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
 
   return (
     <div className="app">
@@ -20,7 +22,16 @@ function App() {
           <h1>cvPRD</h1>
           <p>AI-Powered Product Requirements Documentation</p>
         </div>
+        <button
+          className="settings-button"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+        >
+          ⚙
+        </button>
       </header>
+
+      <Settings isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
       <nav className="app-nav">
         <button

@@ -67,17 +67,12 @@ parts:
       mkdir -p $SNAPCRAFT_PART_INSTALL/app
       cp -r app/* $SNAPCRAFT_PART_INSTALL/app/
 
-  # Frontend (React built files)
+  # Frontend (React built files) - use pre-built dist
   frontend:
-    plugin: npm
-    source: frontend
-    npm-include-node: true
-    npm-node-version: "20.10.0"
-    override-build: |
-      npm install
-      npm run build
-      mkdir -p $SNAPCRAFT_PART_INSTALL/frontend
-      cp -r dist/* $SNAPCRAFT_PART_INSTALL/frontend/
+    plugin: dump
+    source: frontend/dist
+    organize:
+      '*': frontend/
 
   # Launcher scripts
   launchers:

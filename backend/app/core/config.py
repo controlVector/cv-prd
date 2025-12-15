@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "true").lower() == "true"
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6380")
 
-    # Embeddings
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_DIMENSION: int = 384
+    # Embeddings - using OpenRouter's text-embedding-3-small (1536 dimensions)
+    EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
 
     # OpenRouter LLM API
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
