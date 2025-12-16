@@ -13,8 +13,29 @@ block_cipher = None
 # Platform-specific imports
 is_windows = sys.platform == 'win32'
 
-# Collect all app submodules
-hiddenimports = collect_submodules('app')
+# Explicitly list all app submodules (collect_submodules may fail in CI)
+hiddenimports = [
+    'app',
+    'app.main',
+    'app.api',
+    'app.api.routes',
+    'app.core',
+    'app.core.config',
+    'app.models',
+    'app.models.db_models',
+    'app.models.prd_models',
+    'app.services',
+    'app.services.chunking_service',
+    'app.services.database_service',
+    'app.services.document_parser',
+    'app.services.embedding_service',
+    'app.services.export_service',
+    'app.services.graph_service',
+    'app.services.openrouter_service',
+    'app.services.orchestrator',
+    'app.services.prd_optimizer_service',
+    'app.services.vector_service',
+]
 
 # Add uvicorn and FastAPI dependencies
 hiddenimports += [
