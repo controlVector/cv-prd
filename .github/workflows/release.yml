@@ -106,7 +106,18 @@ jobs:
             --include-package=starlette \
             --include-package=pydantic \
             --include-package=pydantic_settings \
-            --include-package=sqlalchemy \
+            --include-package=sqlalchemy.engine \
+            --include-package=sqlalchemy.orm \
+            --include-package=sqlalchemy.ext \
+            --include-package=sqlalchemy.sql \
+            --include-package=sqlalchemy.dialects.postgresql \
+            --nofollow-import-to=sqlalchemy.dialects.oracle \
+            --nofollow-import-to=sqlalchemy.dialects.mssql \
+            --nofollow-import-to=sqlalchemy.dialects.mysql \
+            --nofollow-import-to=sqlalchemy.dialects.sqlite \
+            --nofollow-import-to=sqlalchemy.testing \
+            --nofollow-import-to=qdrant_client.local.tests \
+            --nofollow-import-to=markdown.test_tools \
             --include-package=qdrant_client \
             --include-package=httpx \
             --include-package=anyio \
@@ -116,6 +127,8 @@ jobs:
             --include-package=pypdf \
             --assume-yes-for-downloads \
             --windows-console-mode=attach \
+            --lto=no \
+            --jobs=1 \
             run_server.py
 
       - name: Build Python backend (macOS x86_64)
