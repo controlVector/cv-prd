@@ -9,6 +9,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# Platform-specific settings
+is_windows = sys.platform == 'win32'
+
 # Collect all submodules
 hiddenimports = [
     'uvicorn.logging',
@@ -29,6 +32,10 @@ hiddenimports = [
     'qdrant_client',
     'passlib.handlers.bcrypt',
 ]
+
+# uvloop is only available on Unix systems (Linux/macOS)
+if not is_windows:
+    hiddenimports.append('uvloop')
 
 # Collect data files for sentence-transformers models
 datas = []
@@ -64,6 +71,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=['python*.dll', 'vcruntime*.dll', 'api-ms-*.dll', 'ucrtbase.dll'] if is_windows else [],
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -79,6 +87,6 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=['python*.dll', 'vcruntime*.dll', 'api-ms-*.dll', 'ucrtbase.dll'] if is_windows else [],
     name='cvprd-backend',
 )

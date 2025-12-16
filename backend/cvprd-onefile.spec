@@ -10,6 +10,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# Platform-specific imports
+is_windows = sys.platform == 'win32'
+
 # Collect all app submodules
 hiddenimports = collect_submodules('app')
 
@@ -30,7 +33,6 @@ hiddenimports += [
     'qdrant_client',
     'passlib.handlers.bcrypt',
     'httptools',
-    'uvloop',
     'pydantic',
     'pydantic_settings',
     'fastapi',
@@ -42,6 +44,10 @@ hiddenimports += [
     'markdown',
     'pypdf',
 ]
+
+# uvloop is only available on Unix systems (Linux/macOS)
+if not is_windows:
+    hiddenimports.append('uvloop')
 
 # No heavy excludes needed without torch
 excludes = [
@@ -80,9 +86,9 @@ exe = EXE(
     name='cvprd-backend',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=not is_windows,  # Don't strip on Windows - can cause DLL issues
     upx=True,
-    upx_exclude=[],
+    upx_exclude=['python*.dll', 'vcruntime*.dll', 'api-ms-*.dll', 'ucrtbase.dll'] if is_windows else [],
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,

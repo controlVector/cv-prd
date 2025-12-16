@@ -10,6 +10,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# Platform-specific settings
+is_windows = sys.platform == 'win32'
+
 # Collect all app submodules
 hiddenimports = collect_submodules('app')
 
@@ -30,7 +33,6 @@ hiddenimports += [
     'qdrant_client',
     'passlib.handlers.bcrypt',
     'httptools',
-    'uvloop',
     'pydantic',
     'pydantic_settings',
     'fastapi',
@@ -42,6 +44,10 @@ hiddenimports += [
     'markdown',
     'pypdf',
 ]
+
+# uvloop is only available on Unix systems (Linux/macOS)
+if not is_windows:
+    hiddenimports.append('uvloop')
 
 # Collect necessary data files
 datas = []
@@ -80,8 +86,9 @@ exe = EXE(
     name='cvprd-backend',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=not is_windows,  # Don't strip on Windows
     upx=True,
+    upx_exclude=['python*.dll', 'vcruntime*.dll', 'api-ms-*.dll', 'ucrtbase.dll'] if is_windows else [],
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -95,8 +102,8 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=True,
+    strip=not is_windows,  # Don't strip on Windows
     upx=True,
-    upx_exclude=[],
+    upx_exclude=['python*.dll', 'vcruntime*.dll', 'api-ms-*.dll', 'ucrtbase.dll'] if is_windows else [],
     name='cvprd-backend',
 )
