@@ -87,11 +87,14 @@ excludes = [
     'numpy.testing',
 ]
 
+# Include the entire app package as data
+app_datas = [(os.path.join(SPEC_DIR, 'app'), 'app')]
+
 a = Analysis(
     ['run_server.py'],
     pathex=[SPEC_DIR],  # Include backend dir so 'app' package is found
     binaries=[],
-    datas=[],
+    datas=app_datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

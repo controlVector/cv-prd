@@ -79,8 +79,8 @@ hiddenimports += [
 if not is_windows:
     hiddenimports.append('uvloop')
 
-# Collect necessary data files
-datas = []
+# Include the entire app package as data
+datas = [(os.path.join(SPEC_DIR, 'app'), 'app')]
 
 # No heavy excludes needed without torch
 excludes = [
