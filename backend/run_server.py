@@ -12,6 +12,29 @@ from pathlib import Path
 # Add the app directory to the path for development
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Explicitly import ALL app modules so PyInstaller includes them
+# This forces PyInstaller to trace and bundle these modules
+import app
+import app.main
+import app.api
+import app.api.routes
+import app.core
+import app.core.config
+import app.models
+import app.models.db_models
+import app.models.prd_models
+import app.services
+import app.services.chunking_service
+import app.services.database_service
+import app.services.document_parser
+import app.services.embedding_service
+import app.services.export_service
+import app.services.graph_service
+import app.services.openrouter_service
+import app.services.orchestrator
+import app.services.prd_optimizer_service
+import app.services.vector_service
+
 # Import app directly so PyInstaller bundles it
 from app.main import app as fastapi_app
 
