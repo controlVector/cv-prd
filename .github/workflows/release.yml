@@ -76,6 +76,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Install Nuitka (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          pip install nuitka ordered-set zstandard
+
       - name: Build Python backend (Linux)
         if: matrix.platform == 'ubuntu-latest'
         working-directory: backend
@@ -84,14 +89,34 @@ jobs:
           pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
           mv ../src-tauri/binaries/cvprd-backend ../src-tauri/binaries/cvprd-backend-x86_64-unknown-linux-gnu
 
-      - name: Build Python backend (Windows)
+      - name: Build Python backend (Windows) with Nuitka
         if: matrix.platform == 'windows-latest'
         working-directory: backend
         shell: bash
         run: |
           mkdir -p ../src-tauri/binaries
-          pyinstaller cvprd-onefile.spec --distpath ../src-tauri/binaries --clean -y
-          mv ../src-tauri/binaries/cvprd-backend.exe ../src-tauri/binaries/cvprd-backend-x86_64-pc-windows-msvc.exe
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --output-dir=../src-tauri/binaries \
+            --output-filename=cvprd-backend-x86_64-pc-windows-msvc.exe \
+            --include-package=app \
+            --include-package=uvicorn \
+            --include-package=fastapi \
+            --include-package=starlette \
+            --include-package=pydantic \
+            --include-package=pydantic_settings \
+            --include-package=sqlalchemy \
+            --include-package=qdrant_client \
+            --include-package=httpx \
+            --include-package=anyio \
+            --include-package=redis \
+            --include-package=passlib \
+            --include-package=markdown \
+            --include-package=pypdf \
+            --assume-yes-for-downloads \
+            --windows-console-mode=attach \
+            run_server.py
 
       - name: Build Python backend (macOS x86_64)
         if: matrix.platform == 'macos-latest' && matrix.rust_target == 'x86_64-apple-darwin'
