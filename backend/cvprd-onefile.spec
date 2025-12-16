@@ -10,11 +10,20 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# Get the directory where this spec file is located (backend/)
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
+
 # Platform-specific imports
 is_windows = sys.platform == 'win32'
 
-# Explicitly list all app submodules (collect_submodules may fail in CI)
-hiddenimports = [
+# Add backend dir to path so collect_submodules can find 'app'
+sys.path.insert(0, SPEC_DIR)
+
+# Collect all app submodules dynamically
+hiddenimports = collect_submodules('app')
+
+# Also explicitly list them as fallback
+hiddenimports += [
     'app',
     'app.main',
     'app.api',
@@ -80,7 +89,7 @@ excludes = [
 
 a = Analysis(
     ['run_server.py'],
-    pathex=[],
+    pathex=[SPEC_DIR],  # Include backend dir so 'app' package is found
     binaries=[],
     datas=[],
     hiddenimports=hiddenimports,
