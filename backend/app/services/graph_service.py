@@ -303,6 +303,240 @@ class GraphService:
         logger.info(f"Created {rel_type} relationship: {source_id} -> {target_id}")
 
     # =========================================================================
+    # Artifact Relationship Operations (Tests, Docs, Designs)
+    # =========================================================================
+
+    def create_tests_relationship(
+        self,
+        test_chunk_id: str,
+        requirement_chunk_id: str,
+        properties: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Create TESTS relationship: test_case -[:TESTS]-> requirement."""
+        self.create_relationship(test_chunk_id, requirement_chunk_id, "TESTS", properties)
+
+    def create_documents_relationship(
+        self,
+        doc_chunk_id: str,
+        requirement_chunk_id: str,
+        properties: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Create DOCUMENTS relationship: documentation -[:DOCUMENTS]-> requirement."""
+        self.create_relationship(doc_chunk_id, requirement_chunk_id, "DOCUMENTS", properties)
+
+    def create_designs_relationship(
+        self,
+        design_chunk_id: str,
+        requirement_chunk_id: str,
+        properties: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Create DESIGNS relationship: design_spec -[:DESIGNS]-> requirement."""
+        self.create_relationship(design_chunk_id, requirement_chunk_id, "DESIGNS", properties)
+
+    def get_tests_for_requirement(self, chunk_id: str) -> List[Dict[str, Any]]:
+        """Get all test cases that test a requirement."""
+        query = """
+        MATCH (test:Chunk)-[:TESTS]->(req:Chunk {id: $chunk_id})
+        RETURN test.id as id,
+               test.type as type,
+               test.text as text,
+               test.priority as priority,
+               test.context as context
+        """
+        return self._query(query, {"chunk_id": chunk_id})
+
+    def get_documentation_for_requirement(self, chunk_id: str) -> List[Dict[str, Any]]:
+        """Get all documentation chunks that document a requirement."""
+        query = """
+        MATCH (doc:Chunk)-[:DOCUMENTS]->(req:Chunk {id: $chunk_id})
+        RETURN doc.id as id,
+               doc.type as type,
+               doc.text as text,
+               doc.priority as priority,
+               doc.context as context
+        """
+        return self._query(query, {"chunk_id": chunk_id})
+
+    def get_designs_for_requirement(self, chunk_id: str) -> List[Dict[str, Any]]:
+        """Get all design artifacts that design a requirement."""
+        query = """
+        MATCH (design:Chunk)-[:DESIGNS]->(req:Chunk {id: $chunk_id})
+        RETURN design.id as id,
+               design.type as type,
+               design.text as text,
+               design.priority as priority,
+               design.context as context
+        """
+        return self._query(query, {"chunk_id": chunk_id})
+
+    def get_all_tests_for_prd(self, prd_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all test cases for a PRD.
+
+        Returns test cases with their linked requirement info.
+        """
+        query = """
+        MATCH (test:Chunk)-[:TESTS]->(req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        RETURN test.id as id,
+               test.type as chunk_type,
+               test.text as text,
+               test.priority as priority,
+               test.context as context,
+               req.id as source_requirement_id,
+               req.text as requirement_text
+        ORDER BY test.type, test.priority
+        """
+        return self._query(query, {"prd_id": prd_id})
+
+    def get_test_coverage(self, prd_id: str) -> Dict[str, Any]:
+        """
+        Calculate test coverage for a PRD.
+
+        Returns counts and percentages of requirements covered by tests.
+        """
+        # Get all requirements in PRD
+        req_query = """
+        MATCH (req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        WHERE req.type IN ['requirement', 'feature', 'constraint']
+        RETURN count(req) as total_requirements
+        """
+        req_result = self._query(req_query, {"prd_id": prd_id})
+        total_requirements = req_result[0].get("total_requirements", 0) if req_result else 0
+
+        # Get requirements that have tests
+        covered_query = """
+        MATCH (test:Chunk)-[:TESTS]->(req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        WHERE req.type IN ['requirement', 'feature', 'constraint']
+        RETURN count(DISTINCT req) as covered_requirements
+        """
+        covered_result = self._query(covered_query, {"prd_id": prd_id})
+        covered_requirements = covered_result[0].get("covered_requirements", 0) if covered_result else 0
+
+        # Get test counts
+        test_query = """
+        MATCH (test:Chunk)-[:TESTS]->(req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        RETURN count(test) as total_tests
+        """
+        test_result = self._query(test_query, {"prd_id": prd_id})
+        total_tests = test_result[0].get("total_tests", 0) if test_result else 0
+
+        coverage_percent = (covered_requirements / total_requirements * 100) if total_requirements > 0 else 0
+
+        return {
+            "prd_id": prd_id,
+            "total_requirements": total_requirements,
+            "covered_requirements": covered_requirements,
+            "uncovered_requirements": total_requirements - covered_requirements,
+            "total_tests": total_tests,
+            "coverage_percent": round(coverage_percent, 2),
+        }
+
+    def get_documentation_coverage(self, prd_id: str) -> Dict[str, Any]:
+        """
+        Calculate documentation coverage for a PRD.
+
+        Returns counts and percentages of requirements covered by documentation.
+        """
+        # Get all requirements in PRD
+        req_query = """
+        MATCH (req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        WHERE req.type IN ['requirement', 'feature', 'constraint']
+        RETURN count(req) as total_requirements
+        """
+        req_result = self._query(req_query, {"prd_id": prd_id})
+        total_requirements = req_result[0].get("total_requirements", 0) if req_result else 0
+
+        # Get requirements that have documentation
+        covered_query = """
+        MATCH (doc:Chunk)-[:DOCUMENTS]->(req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        WHERE req.type IN ['requirement', 'feature', 'constraint']
+        RETURN count(DISTINCT req) as covered_requirements
+        """
+        covered_result = self._query(covered_query, {"prd_id": prd_id})
+        covered_requirements = covered_result[0].get("covered_requirements", 0) if covered_result else 0
+
+        # Get doc counts
+        doc_query = """
+        MATCH (doc:Chunk)-[:DOCUMENTS]->(req:Chunk)-[:BELONGS_TO]->(p:PRD {id: $prd_id})
+        RETURN count(doc) as total_docs
+        """
+        doc_result = self._query(doc_query, {"prd_id": prd_id})
+        total_docs = doc_result[0].get("total_docs", 0) if doc_result else 0
+
+        coverage_percent = (covered_requirements / total_requirements * 100) if total_requirements > 0 else 0
+
+        return {
+            "prd_id": prd_id,
+            "total_requirements": total_requirements,
+            "covered_requirements": covered_requirements,
+            "uncovered_requirements": total_requirements - covered_requirements,
+            "total_docs": total_docs,
+            "coverage_percent": round(coverage_percent, 2),
+        }
+
+    def get_full_traceability(self, chunk_id: str, depth: int = 3) -> Dict[str, Any]:
+        """
+        Get complete traceability for a chunk.
+
+        Returns all related artifacts: dependencies, tests, documentation,
+        designs, and code implementations.
+        """
+        result = {
+            "chunk_id": chunk_id,
+            "chunk": None,
+            "dependencies": [],
+            "dependents": [],
+            "tests": [],
+            "documentation": [],
+            "designs": [],
+            "implementations": [],
+        }
+
+        # Get the chunk itself
+        chunk_query = """
+        MATCH (c:Chunk {id: $chunk_id})
+        RETURN c.id as id, c.type as type, c.text as text,
+               c.priority as priority, c.context as context
+        """
+        chunk_result = self._query(chunk_query, {"chunk_id": chunk_id})
+        if chunk_result:
+            result["chunk"] = chunk_result[0]
+
+        # Get dependencies (what this chunk depends on)
+        deps_query = f"""
+        MATCH (c:Chunk {{id: $chunk_id}})-[:DEPENDS_ON*1..{depth}]->(dep:Chunk)
+        RETURN DISTINCT dep.id as id, dep.type as type, dep.text as text, dep.priority as priority
+        """
+        result["dependencies"] = self._query(deps_query, {"chunk_id": chunk_id})
+
+        # Get dependents (what depends on this chunk)
+        dependents_query = f"""
+        MATCH (dependent:Chunk)-[:DEPENDS_ON*1..{depth}]->(c:Chunk {{id: $chunk_id}})
+        RETURN DISTINCT dependent.id as id, dependent.type as type, dependent.text as text, dependent.priority as priority
+        """
+        result["dependents"] = self._query(dependents_query, {"chunk_id": chunk_id})
+
+        # Get tests
+        result["tests"] = self.get_tests_for_requirement(chunk_id)
+
+        # Get documentation
+        result["documentation"] = self.get_documentation_for_requirement(chunk_id)
+
+        # Get designs
+        result["designs"] = self.get_designs_for_requirement(chunk_id)
+
+        # Get code implementations (Symbol nodes)
+        impl_query = """
+        MATCH (sym:Symbol)-[:IMPLEMENTS]->(c:Chunk {id: $chunk_id})
+        RETURN sym.qualified_name as qualified_name,
+               sym.kind as kind,
+               sym.file as file
+        """
+        result["implementations"] = self._query(impl_query, {"chunk_id": chunk_id})
+
+        return result
+
+    # =========================================================================
     # Query Operations
     # =========================================================================
 
@@ -395,20 +629,39 @@ class GraphService:
     # =========================================================================
 
     def get_all_prds(self) -> List[Dict[str, Any]]:
-        """Get all PRDs with chunk counts."""
+        """Get all PRDs with chunk counts (excluding test/doc artifacts)."""
+        # Test/doc/design types to exclude from requirement count
+        artifact_types = [
+            'test_case', 'unit_test_spec', 'integration_test_spec', 'acceptance_criteria',
+            'documentation', 'user_manual', 'api_doc', 'technical_spec', 'release_note',
+            'design_spec', 'screen_flow', 'wireframe'
+        ]
         query = """
         MATCH (p:PRD)
         OPTIONAL MATCH (p)<-[:BELONGS_TO]-(c:Chunk)
+        WHERE c.type IS NULL OR NOT c.type IN $artifact_types
+        WITH p, count(c) as requirement_count
+        OPTIONAL MATCH (p)<-[:BELONGS_TO]-(t:Chunk)
+        WHERE t.type IN ['test_case', 'unit_test_spec', 'integration_test_spec', 'acceptance_criteria']
         RETURN p.id as id,
                p.name as name,
                p.description as description,
-               count(c) as chunk_count
+               requirement_count as chunk_count,
+               count(t) as test_count
         ORDER BY p.name
         """
-        return self._query(query)
+        return self._query(query, {"artifact_types": artifact_types})
 
     def get_prd_details(self, prd_id: str) -> Optional[Dict[str, Any]]:
         """Get PRD with all its chunks."""
+        # Test/doc/design types to exclude from requirement count
+        artifact_types = [
+            'test_case', 'unit_test_spec', 'integration_test_spec', 'acceptance_criteria',
+            'documentation', 'user_manual', 'api_doc', 'technical_spec', 'release_note',
+            'design_spec', 'screen_flow', 'wireframe'
+        ]
+        test_types = ['test_case', 'unit_test_spec', 'integration_test_spec', 'acceptance_criteria']
+
         # First get the PRD
         prd_query = """
         MATCH (p:PRD {id: $prd_id})
@@ -426,7 +679,16 @@ class GraphService:
         RETURN c.id as id, c.type as type, c.text as text, c.priority as priority
         """
         chunks = self._query(chunks_query, {"prd_id": prd_id})
-        result["chunks"] = [c for c in chunks if c.get("id")]
+        all_chunks = [c for c in chunks if c.get("id")]
+
+        # Separate requirements from tests/docs
+        requirements = [c for c in all_chunks if c.get("type") not in artifact_types]
+        tests = [c for c in all_chunks if c.get("type") in test_types]
+
+        result["chunks"] = requirements  # Only show requirements in main chunks
+        result["tests"] = tests  # Separate tests list
+        result["chunk_count"] = len(requirements)
+        result["test_count"] = len(tests)
 
         return result
 

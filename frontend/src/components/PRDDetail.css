@@ -1,0 +1,66 @@
+/* Main tabs for PRD detail view */
+.prd-main-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--cv-navy-lighter);
+  border-radius: 12px;
+  padding: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.prd-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--cv-text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.prd-tab:hover {
+  color: var(--cv-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.prd-tab.active {
+  background: var(--cv-navy);
+  color: var(--cv-orange);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.tab-icon {
+  font-size: 1.1rem;
+}
+
+.tab-count {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  background: rgba(245, 166, 35, 0.2);
+  color: var(--cv-orange);
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.prd-tab:not(.active) .tab-count {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--cv-text-muted);
+}
+
+/* Responsive tabs */
+@media (max-width: 600px) {
+  .prd-main-tabs {
+    flex-direction: column;
+  }
+
+  .prd-tab {
+    justify-content: flex-start;
+  }
+}

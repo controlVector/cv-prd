@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "cvPRD"
     DEBUG: bool = True
 
+    # Server
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+
     # Database (supports both PostgreSQL and SQLite)
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://cvprd:cvprd_dev@localhost:5433/cvprd")
 
@@ -41,6 +45,14 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1/chat/completions"
     OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+
+    # AI Generation Settings (user-configurable)
+    AI_TEMPERATURE: float = float(os.getenv("AI_TEMPERATURE", "0.7"))
+    AI_MAX_TOKENS: int = int(os.getenv("AI_MAX_TOKENS", "4000"))
+    DEFAULT_TEST_FRAMEWORK: str = os.getenv("DEFAULT_TEST_FRAMEWORK", "pytest")
+
+    # Usage Tracking
+    USAGE_TRACKING_ENABLED: bool = os.getenv("USAGE_TRACKING_ENABLED", "true").lower() == "true"
 
     # Security
     SECRET_KEY: str = "dev-secret-key-change-in-production"

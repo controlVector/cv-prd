@@ -127,3 +127,144 @@ export const exportPRDs = async (request: ExportRequest): Promise<Blob> => {
   })
   return response.data
 }
+
+// =============================================================================
+// Test Generation
+// =============================================================================
+
+export interface GenerateTestsRequest {
+  test_type?: 'unit' | 'integration' | 'acceptance' | 'all'
+  framework?: 'pytest' | 'jest' | 'mocha' | 'vitest'
+  include_code_stub?: boolean
+}
+
+export interface TestCase {
+  id: string
+  name: string
+  description: string
+  test_type: string
+  code_stub?: string
+  requirement_chunk_id: string
+}
+
+export interface GenerateTestsResponse {
+  chunk_id: string
+  test_cases: TestCase[]
+  count: number
+}
+
+export interface TestSuiteResponse {
+  prd_id: string
+  total_tests: number
+  by_type: Record<string, number>
+  test_cases: TestCase[]
+}
+
+export const generateTestsForChunk = async (
+  chunkId: string,
+  options: GenerateTestsRequest = {}
+): Promise<GenerateTestsResponse> => {
+  const response = await api.post(`/chunks/${chunkId}/generate-tests`, {
+    test_type: options.test_type || 'all',
+    framework: options.framework,
+    include_code_stub: options.include_code_stub ?? true,
+  })
+  return response.data
+}
+
+export const generateTestSuite = async (
+  prdId: string,
+  framework?: string
+): Promise<TestSuiteResponse> => {
+  const response = await api.post(`/prds/${prdId}/generate-test-suite`, {
+    framework,
+  })
+  return response.data
+}
+
+export const getTestsForChunk = async (chunkId: string): Promise<TestCase[]> => {
+  const response = await api.get(`/chunks/${chunkId}/tests`)
+  return response.data
+}
+
+export const getTestsForPrd = async (prdId: string): Promise<{ tests: TestCase[] }> => {
+  const response = await api.get(`/prds/${prdId}/tests`)
+  return response.data
+}
+
+export const getTestCoverage = async (prdId: string) => {
+  const response = await api.get(`/prds/${prdId}/test-coverage`)
+  return response.data
+}
+
+// =============================================================================
+// Documentation Generation
+// =============================================================================
+
+export interface DocSection {
+  id: string
+  title: string
+  content: string
+  doc_type: string
+  requirement_chunk_id?: string
+}
+
+export interface GenerateDocsResponse {
+  prd_id: string
+  doc_type: string
+  sections: DocSection[]
+  count: number
+}
+
+export interface ReleaseNotesResponse {
+  prd_id: string
+  version: string
+  content: string
+  sections: {
+    features: string[]
+    improvements: string[]
+    fixes: string[]
+  }
+}
+
+export const generateUserManual = async (
+  prdId: string,
+  audience: string = 'end users'
+): Promise<GenerateDocsResponse> => {
+  const response = await api.post(
+    `/prds/${prdId}/generate-user-manual?audience=${encodeURIComponent(audience)}`
+  )
+  return response.data
+}
+
+export const generateApiDocs = async (prdId: string): Promise<GenerateDocsResponse> => {
+  const response = await api.post(`/prds/${prdId}/generate-api-docs`)
+  return response.data
+}
+
+export const generateTechnicalSpec = async (prdId: string): Promise<GenerateDocsResponse> => {
+  const response = await api.post(`/prds/${prdId}/generate-technical-spec`)
+  return response.data
+}
+
+export const generateReleaseNotes = async (
+  prdId: string,
+  version: string,
+  changes?: string[]
+): Promise<ReleaseNotesResponse> => {
+  const response = await api.post(`/prds/${prdId}/generate-release-notes`, {
+    version,
+    changes,
+  })
+  return response.data
+}
+
+export const getDocumentationForChunk = async (chunkId: string): Promise<DocSection[]> => {
+  const response = await api.get(`/chunks/${chunkId}/documentation`)
+  return response.data
+}
+
+export const getDocumentationCoverage = async (prdId: string) => {
+  const response = await api.get(`/prds/${prdId}/documentation-coverage`)
+  return response.data
+}

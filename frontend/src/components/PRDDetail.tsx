@@ -2,11 +2,16 @@ import { useState, useEffect } from 'react'
 import { getPRD, optimizePRD } from '../services/api'
 import { downloadMarkdown, copyMarkdownToClipboard } from '../utils/markdown-export'
 import { MarkdownViewer } from './MarkdownViewer'
+import { TestsPanel } from './TestsPanel'
+import { DocsPanel } from './DocsPanel'
+import './PRDDetail.css'
 
 interface PRDDetailProps {
   prdId: string
   onBack: () => void
 }
+
+type DetailTab = 'requirements' | 'tests' | 'docs'
 
 export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
   const [prdData, setPrdData] = useState<any>(null)
@@ -16,6 +21,7 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
   const [optimizationResult, setOptimizationResult] = useState<any>(null)
   const [copySuccess, setCopySuccess] = useState(false)
   const [showViewer, setShowViewer] = useState(false)
+  const [activeTab, setActiveTab] = useState<DetailTab>('requirements')
 
   useEffect(() => {
     loadPRD()
@@ -60,7 +66,7 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
       // Reload PRD to show updated content
       await loadPRD()
 
-      alert(`✓ PRD "${prdData.name}" optimized successfully!\n\n` +
+      alert(`PRD "${prdData.name}" optimized successfully!\n\n` +
         `Updated: ${result.statistics.facts_updated} facts\n` +
         `Created: ${result.statistics.facts_created} new facts\n` +
         `New relationships: ${result.statistics.relationships_created}\n\n` +
@@ -119,28 +125,28 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
             className="btn-secondary"
             title="Preview as rendered Markdown"
           >
-            📝 Preview
+            Preview
           </button>
           <button
             onClick={handleCopyMarkdown}
             className="btn-secondary"
             title="Copy as Markdown"
           >
-            {copySuccess ? '✓ Copied!' : '📋 Copy MD'}
+            {copySuccess ? 'Copied!' : 'Copy MD'}
           </button>
           <button
             onClick={handleDownloadMarkdown}
             className="btn-secondary"
             title="Download as Markdown (opens in cv-md)"
           >
-            📥 Export MD
+            Export MD
           </button>
           <button
             onClick={handleOptimize}
             disabled={isOptimizing}
             className="btn-primary"
           >
-            {isOptimizing ? 'Optimizing...' : '🤖 Optimize for AI'}
+            {isOptimizing ? 'Optimizing...' : 'Optimize for AI'}
           </button>
         </div>
       </div>
@@ -168,52 +174,89 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
           </div>
         </div>
 
-        {optimizationResult && (
+        {/* Main navigation tabs */}
+        <div className="prd-main-tabs">
+          <button
+            className={`prd-tab ${activeTab === 'requirements' ? 'active' : ''}`}
+            onClick={() => setActiveTab('requirements')}
+          >
+            <span className="tab-icon">📋</span>
+            Requirements
+            <span className="tab-count">{prdData.chunks?.length || 0}</span>
+          </button>
+          <button
+            className={`prd-tab ${activeTab === 'tests' ? 'active' : ''}`}
+            onClick={() => setActiveTab('tests')}
+          >
+            <span className="tab-icon">🧪</span>
+            Test Cases
+          </button>
+          <button
+            className={`prd-tab ${activeTab === 'docs' ? 'active' : ''}`}
+            onClick={() => setActiveTab('docs')}
+          >
+            <span className="tab-icon">📖</span>
+            Documentation
+          </button>
+        </div>
+
+        {optimizationResult && activeTab === 'requirements' && (
           <div className="optimization-banner">
-            <h3>🎉 Recently Optimized</h3>
+            <h3>Recently Optimized</h3>
             <p>{optimizationResult.analysis.overall_assessment}</p>
             <div className="optimization-stats">
-              <span>✓ {optimizationResult.statistics.facts_updated} updated</span>
-              <span>✓ {optimizationResult.statistics.facts_created} created</span>
-              <span>✓ {optimizationResult.statistics.relationships_created} new relationships</span>
+              <span>{optimizationResult.statistics.facts_updated} updated</span>
+              <span>{optimizationResult.statistics.facts_created} created</span>
+              <span>{optimizationResult.statistics.relationships_created} new relationships</span>
             </div>
           </div>
         )}
 
-        <div className="prd-content">
-          {Object.keys(groupedChunks).length === 0 ? (
-            <p className="empty-state">No content available for this PRD.</p>
-          ) : (
-            Object.entries(groupedChunks).map(([section, chunks]: [string, any]) => (
-              <div key={section} className="prd-section">
-                <h2>{section}</h2>
-                {chunks.map((chunk: any, idx: number) => (
-                  <div key={chunk.id || idx} className="prd-chunk">
-                    <div className="chunk-header">
-                      <span className={`chunk-type chunk-type-${chunk.type.toLowerCase()}`}>
-                        {chunk.type}
-                      </span>
-                      <span className={`chunk-priority chunk-priority-${chunk.priority.toLowerCase()}`}>
-                        {chunk.priority}
-                      </span>
-                      {chunk.optimized && (
-                        <span className="chunk-badge optimized">✓ Optimized</span>
+        {/* Tab content */}
+        {activeTab === 'requirements' && (
+          <div className="prd-content">
+            {Object.keys(groupedChunks).length === 0 ? (
+              <p className="empty-state">No content available for this PRD.</p>
+            ) : (
+              Object.entries(groupedChunks).map(([section, chunks]: [string, any]) => (
+                <div key={section} className="prd-section">
+                  <h2>{section}</h2>
+                  {chunks.map((chunk: any, idx: number) => (
+                    <div key={chunk.id || idx} className="prd-chunk">
+                      <div className="chunk-header">
+                        <span className={`chunk-type chunk-type-${chunk.type.toLowerCase()}`}>
+                          {chunk.type}
+                        </span>
+                        <span className={`chunk-priority chunk-priority-${chunk.priority.toLowerCase()}`}>
+                          {chunk.priority}
+                        </span>
+                        {chunk.optimized && (
+                          <span className="chunk-badge optimized">Optimized</span>
+                        )}
+                      </div>
+                      <div className="chunk-text">
+                        {chunk.text}
+                      </div>
+                      {chunk.optimization_notes && (
+                        <div className="chunk-notes">
+                          <strong>Optimization notes:</strong> {chunk.optimization_notes}
+                        </div>
                       )}
                     </div>
-                    <div className="chunk-text">
-                      {chunk.text}
-                    </div>
-                    {chunk.optimization_notes && (
-                      <div className="chunk-notes">
-                        <strong>Optimization notes:</strong> {chunk.optimization_notes}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'tests' && (
+          <TestsPanel prdId={prdId} prdName={prdData.name} />
+        )}
+
+        {activeTab === 'docs' && (
+          <DocsPanel prdId={prdId} prdName={prdData.name} />
+        )}
       </div>
     </div>
   )

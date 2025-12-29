@@ -11,6 +11,9 @@ from app.services.orchestrator import PRDOrchestrator
 from app.services.prd_optimizer_service import PRDOptimizerService
 from app.services.document_parser import DocumentParser, DocumentParserError
 from app.services.export_service import ExportService, ExportFormat, ExportType
+from app.services.test_generation_service import TestGenerationService, TestType, TestFramework
+from app.services.doc_generation_service import DocGenerationService, DocType
+from app.core.config import settings
 import uuid
 import logging
 import tempfile
@@ -38,6 +41,22 @@ export_service = ExportService(
     vector_service=orchestrator.vector_service,
     embedding_service=orchestrator.embedding_service,
     orchestrator=orchestrator,
+)
+
+# Initialize test generation service
+test_generation_service = TestGenerationService(
+    openrouter=prd_optimizer.openrouter,
+    graph_service=orchestrator.graph_service,
+    embedding_service=orchestrator.embedding_service,
+    vector_service=orchestrator.vector_service,
+)
+
+# Initialize doc generation service
+doc_generation_service = DocGenerationService(
+    openrouter=prd_optimizer.openrouter,
+    graph_service=orchestrator.graph_service,
+    embedding_service=orchestrator.embedding_service,
+    vector_service=orchestrator.vector_service,
 )
 
 
@@ -1158,20 +1177,16 @@ async def get_shared_credentials():
     return {"credentials": masked, "path": CREDENTIALS_PATH}
 
 
-@router.get("/credentials/raw")
-async def get_credentials_raw():
-    """
-    Get raw credentials (for internal use by services).
-    Also applies credentials to current environment.
-    """
-    creds = _load_credentials()
-
-    # Apply to environment
+def _apply_credentials(creds: dict):
+    """Apply credentials to environment and service instances."""
     if creds.get("openrouter_key"):
         os.environ["OPENROUTER_API_KEY"] = creds["openrouter_key"]
         os.environ["CV_OPENROUTER_KEY"] = creds["openrouter_key"]
         if orchestrator.embedding_service:
             orchestrator.embedding_service.api_key = creds["openrouter_key"]
+        # Update PRD optimizer and generation services
+        if prd_optimizer.openrouter:
+            prd_optimizer.openrouter.api_key = creds["openrouter_key"]
     if creds.get("anthropic_key"):
         os.environ["ANTHROPIC_API_KEY"] = creds["anthropic_key"]
         os.environ["CV_ANTHROPIC_KEY"] = creds["anthropic_key"]
@@ -1180,6 +1195,31 @@ async def get_credentials_raw():
     if creds.get("github_token"):
         os.environ["GITHUB_TOKEN"] = creds["github_token"]
 
+
+# Load credentials at module initialization
+def _init_credentials():
+    """Load and apply credentials at startup."""
+    try:
+        creds = _load_credentials()
+        _apply_credentials(creds)
+        if creds.get("openrouter_key"):
+            logger.info("Loaded OpenRouter API key from credentials file")
+    except Exception as e:
+        logger.warning(f"Could not load credentials at startup: {e}")
+
+
+# Initialize credentials when module loads
+_init_credentials()
+
+
+@router.get("/credentials/raw")
+async def get_credentials_raw():
+    """
+    Get raw credentials (for internal use by services).
+    Also applies credentials to current environment.
+    """
+    creds = _load_credentials()
+    _apply_credentials(creds)
     return creds
 
 
@@ -1194,22 +1234,15 @@ async def update_shared_credentials(request: UpdateCredentialsRequest):
     # Only update non-None values
     if request.openrouter_key is not None:
         creds["openrouter_key"] = request.openrouter_key
-        os.environ["OPENROUTER_API_KEY"] = request.openrouter_key
-        os.environ["CV_OPENROUTER_KEY"] = request.openrouter_key
-        if orchestrator.embedding_service:
-            orchestrator.embedding_service.api_key = request.openrouter_key
     if request.anthropic_key is not None:
         creds["anthropic_key"] = request.anthropic_key
-        os.environ["ANTHROPIC_API_KEY"] = request.anthropic_key
-        os.environ["CV_ANTHROPIC_KEY"] = request.anthropic_key
     if request.figma_token is not None:
         creds["figma_token"] = request.figma_token
-        os.environ["FIGMA_API_TOKEN"] = request.figma_token
     if request.github_token is not None:
         creds["github_token"] = request.github_token
-        os.environ["GITHUB_TOKEN"] = request.github_token
 
     _save_credentials(creds)
+    _apply_credentials(creds)
     logger.info(f"Saved shared credentials to {CREDENTIALS_PATH}")
 
     return {"status": "success", "message": f"Credentials saved to {CREDENTIALS_PATH}"}
@@ -1500,7 +1533,7 @@ async def get_export_formats():
                         "description": "Nodes and edges (~100KB)",
                     },
                     {
-                        "id": "full", 
+                        "id": "full",
                         "name": "Full (with embeddings)",
                         "description": "Include vector embeddings (~5-20MB)",
                     }
@@ -1521,3 +1554,941 @@ async def get_export_formats():
             }
         ]
     }
+
+
+# =============================================================================
+# Test Generation Endpoints
+# =============================================================================
+
+class GenerateTestsRequest(BaseModel):
+    test_type: str = "all"  # unit, integration, acceptance, all
+    framework: Optional[str] = None  # pytest, jest, etc.
+    include_code_stub: bool = True
+
+
+class GenerateTestSuiteRequest(BaseModel):
+    framework: Optional[str] = None
+
+
+@router.post("/chunks/{chunk_id}/generate-tests")
+async def generate_tests_for_requirement(chunk_id: str, request: GenerateTestsRequest):
+    """
+    Generate test cases for a specific requirement chunk.
+
+    Returns test specifications and optionally code stubs.
+    """
+    try:
+        # Get the chunk
+        if not orchestrator.db_service:
+            raise HTTPException(status_code=503, detail="Database service not available")
+
+        chunk = orchestrator.db_service.get_chunk(chunk_id)
+        if not chunk:
+            raise HTTPException(status_code=404, detail="Chunk not found")
+
+        chunk_dict = chunk.to_dict()
+
+        # Get PRD context
+        prd = orchestrator.get_prd_details(chunk_dict.get("prd_id", ""))
+        prd_context = {
+            "prd_id": chunk_dict.get("prd_id"),
+            "prd_name": prd.get("name", "Unknown") if prd else "Unknown",
+        }
+
+        # Map test type
+        test_type_map = {
+            "unit": TestType.UNIT,
+            "integration": TestType.INTEGRATION,
+            "acceptance": TestType.ACCEPTANCE,
+            "all": TestType.ALL,
+        }
+        test_type = test_type_map.get(request.test_type.lower(), TestType.ALL)
+
+        # Map framework
+        framework = None
+        if request.framework:
+            framework_map = {
+                "pytest": TestFramework.PYTEST,
+                "jest": TestFramework.JEST,
+                "mocha": TestFramework.MOCHA,
+                "vitest": TestFramework.VITEST,
+            }
+            framework = framework_map.get(request.framework.lower())
+
+        # Generate tests
+        test_cases = await test_generation_service.generate_test_cases(
+            requirement_chunk=chunk_dict,
+            prd_context=prd_context,
+            test_type=test_type,
+            framework=framework,
+            include_code_stub=request.include_code_stub,
+        )
+
+        return {
+            "chunk_id": chunk_id,
+            "test_cases": test_cases,
+            "count": len(test_cases),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating tests: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prds/{prd_id}/generate-test-suite")
+async def generate_test_suite(prd_id: str, request: GenerateTestSuiteRequest):
+    """
+    Generate a complete test suite for all requirements in a PRD.
+    """
+    try:
+        prd = orchestrator.get_prd_details(prd_id)
+        if not prd:
+            raise HTTPException(status_code=404, detail="PRD not found")
+
+        chunks = prd.get("chunks", [])
+
+        # Map framework
+        framework = None
+        if request.framework:
+            framework_map = {
+                "pytest": TestFramework.PYTEST,
+                "jest": TestFramework.JEST,
+                "mocha": TestFramework.MOCHA,
+                "vitest": TestFramework.VITEST,
+            }
+            framework = framework_map.get(request.framework.lower())
+
+        result = await test_generation_service.generate_test_suite(
+            prd_id=prd_id,
+            chunks=chunks,
+            prd_name=prd.get("name", "Unknown"),
+            framework=framework,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating test suite: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prds/{prd_id}/tests")
+async def get_tests_for_prd(prd_id: str):
+    """
+    Get all test cases for a PRD.
+
+    Returns test cases with their linked requirement info.
+    """
+    try:
+        if not orchestrator.graph_service:
+            return {"tests": []}
+
+        tests = orchestrator.graph_service.get_all_tests_for_prd(prd_id)
+
+        # Parse test case info from stored text
+        parsed_tests = []
+        for test in tests or []:
+            text = test.get("text", "")
+            # Extract title from markdown header
+            title = "Untitled Test"
+            if text.startswith("# "):
+                title = text.split("\n")[0][2:].strip()
+
+            # Extract description (first paragraph after title)
+            description = ""
+            lines = text.split("\n")
+            for i, line in enumerate(lines[1:], 1):
+                if line.strip() and not line.startswith("#"):
+                    description = line.strip()
+                    break
+
+            # Determine test_type from chunk_type
+            chunk_type = test.get("chunk_type", "test_case")
+            test_type = "unit"
+            if "integration" in chunk_type:
+                test_type = "integration"
+            elif "acceptance" in chunk_type:
+                test_type = "acceptance"
+
+            # Extract code stub if present
+            code_stub = ""
+            if "```" in text:
+                parts = text.split("```")
+                if len(parts) >= 2:
+                    code_stub = parts[1].strip()
+                    if code_stub.startswith("python") or code_stub.startswith("javascript"):
+                        code_stub = code_stub.split("\n", 1)[1] if "\n" in code_stub else ""
+
+            parsed_tests.append({
+                "id": test.get("id"),
+                "name": title,
+                "title": title,
+                "description": description,
+                "test_type": test_type,
+                "priority": test.get("priority", "medium"),
+                "code_stub": code_stub,
+                "source_requirement_id": test.get("source_requirement_id"),
+                "requirement_text": test.get("requirement_text", "")[:200],
+            })
+
+        return {"tests": parsed_tests}
+
+    except Exception as e:
+        logger.error(f"Error getting tests for PRD: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prds/{prd_id}/test-coverage")
+async def get_test_coverage(prd_id: str):
+    """
+    Get test coverage metrics for a PRD.
+    """
+    try:
+        if not orchestrator.graph_service:
+            raise HTTPException(status_code=503, detail="Graph service not available")
+
+        coverage = orchestrator.graph_service.get_test_coverage(prd_id)
+        return coverage
+
+    except Exception as e:
+        logger.error(f"Error getting test coverage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/chunks/{chunk_id}/tests")
+async def get_tests_for_chunk(chunk_id: str):
+    """
+    Get all test cases that test a specific requirement.
+    """
+    try:
+        if not orchestrator.graph_service:
+            return []
+
+        tests = orchestrator.graph_service.get_tests_for_requirement(chunk_id)
+        return tests or []
+
+    except Exception as e:
+        logger.error(f"Error getting tests for chunk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Documentation Generation Endpoints
+# =============================================================================
+
+class GenerateReleaseNotesRequest(BaseModel):
+    version: str
+    changes: Optional[List[str]] = None
+
+
+@router.post("/prds/{prd_id}/generate-user-manual")
+async def generate_user_manual(prd_id: str, audience: str = "end users"):
+    """
+    Generate user manual sections from PRD requirements.
+    """
+    try:
+        prd = orchestrator.get_prd_details(prd_id)
+        if not prd:
+            raise HTTPException(status_code=404, detail="PRD not found")
+
+        chunks = prd.get("chunks", [])
+
+        doc_chunks = await doc_generation_service.generate_user_manual(
+            prd_id=prd_id,
+            prd_name=prd.get("name", "Unknown"),
+            chunks=chunks,
+            audience=audience,
+        )
+
+        return {
+            "prd_id": prd_id,
+            "doc_type": "user_manual",
+            "sections": doc_chunks,
+            "count": len(doc_chunks),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating user manual: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prds/{prd_id}/generate-api-docs")
+async def generate_api_docs(prd_id: str):
+    """
+    Generate API documentation from PRD requirements.
+    """
+    try:
+        prd = orchestrator.get_prd_details(prd_id)
+        if not prd:
+            raise HTTPException(status_code=404, detail="PRD not found")
+
+        chunks = prd.get("chunks", [])
+
+        doc_chunks = await doc_generation_service.generate_api_docs(
+            prd_id=prd_id,
+            prd_name=prd.get("name", "Unknown"),
+            chunks=chunks,
+        )
+
+        return {
+            "prd_id": prd_id,
+            "doc_type": "api_docs",
+            "sections": doc_chunks,
+            "count": len(doc_chunks),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating API docs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prds/{prd_id}/generate-technical-spec")
+async def generate_technical_spec(prd_id: str):
+    """
+    Generate technical specification from PRD requirements.
+    """
+    try:
+        prd = orchestrator.get_prd_details(prd_id)
+        if not prd:
+            raise HTTPException(status_code=404, detail="PRD not found")
+
+        chunks = prd.get("chunks", [])
+
+        doc_chunks = await doc_generation_service.generate_technical_spec(
+            prd_id=prd_id,
+            prd_name=prd.get("name", "Unknown"),
+            chunks=chunks,
+        )
+
+        return {
+            "prd_id": prd_id,
+            "doc_type": "technical_spec",
+            "sections": doc_chunks,
+            "count": len(doc_chunks),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating technical spec: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prds/{prd_id}/generate-release-notes")
+async def generate_release_notes(prd_id: str, request: GenerateReleaseNotesRequest):
+    """
+    Generate release notes for a version.
+    """
+    try:
+        prd = orchestrator.get_prd_details(prd_id)
+        if not prd:
+            raise HTTPException(status_code=404, detail="PRD not found")
+
+        chunks = prd.get("chunks", [])
+
+        release_notes = await doc_generation_service.generate_release_notes(
+            prd_id=prd_id,
+            prd_name=prd.get("name", "Unknown"),
+            version=request.version,
+            chunks=chunks,
+            changes=request.changes,
+        )
+
+        return release_notes
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating release notes: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/chunks/{chunk_id}/documentation")
+async def get_documentation_for_chunk(chunk_id: str):
+    """
+    Get all documentation that documents a specific requirement.
+    """
+    try:
+        if not orchestrator.graph_service:
+            return []
+
+        docs = orchestrator.graph_service.get_documentation_for_requirement(chunk_id)
+        return docs or []
+
+    except Exception as e:
+        logger.error(f"Error getting documentation for chunk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prds/{prd_id}/documentation-coverage")
+async def get_documentation_coverage(prd_id: str):
+    """
+    Get documentation coverage metrics for a PRD.
+    """
+    try:
+        if not orchestrator.graph_service:
+            raise HTTPException(status_code=503, detail="Graph service not available")
+
+        coverage = orchestrator.graph_service.get_documentation_coverage(prd_id)
+        return coverage
+
+    except Exception as e:
+        logger.error(f"Error getting documentation coverage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Unified Context API (for cv-git integration)
+# =============================================================================
+
+class UnifiedContextRequest(BaseModel):
+    query: str
+    prd_id: Optional[str] = None
+    include_types: Optional[List[str]] = None
+    depth: int = 3
+    format: str = "structured"  # structured or narrative
+
+
+@router.post("/context/unified")
+async def get_unified_context(request: UnifiedContextRequest):
+    """
+    Get full context for AI traversal across all artifact types.
+
+    Returns matching chunks with related tests, documentation, designs,
+    and code implementations for comprehensive AI context.
+    """
+    try:
+        # Default include types
+        include_types = request.include_types or [
+            "requirement", "feature", "constraint",
+            "test_case", "unit_test_spec", "integration_test_spec",
+            "documentation", "user_manual", "api_doc", "technical_spec",
+            "design_spec"
+        ]
+
+        # Semantic search for matching chunks
+        search_results = orchestrator.search_semantic(
+            query=request.query,
+            limit=20,
+            prd_id=request.prd_id,
+        )
+
+        # Enrich results with related artifacts
+        enriched_results = []
+        for result in search_results:
+            chunk_id = result.get("chunk_id") or result.get("id")
+            if not chunk_id:
+                continue
+
+            # Get full traceability if graph is available
+            if orchestrator.graph_service:
+                traceability = orchestrator.graph_service.get_full_traceability(
+                    chunk_id, depth=request.depth
+                )
+                result["traceability"] = traceability
+
+            # Filter by include_types
+            chunk_type = result.get("chunk_type") or result.get("type", "")
+            if chunk_type in include_types:
+                enriched_results.append(result)
+
+        # Calculate coverage metrics
+        coverage = {}
+        if request.prd_id and orchestrator.graph_service:
+            coverage = {
+                "test_coverage": orchestrator.graph_service.get_test_coverage(request.prd_id),
+                "doc_coverage": orchestrator.graph_service.get_documentation_coverage(request.prd_id),
+            }
+
+        return {
+            "query": request.query,
+            "prd_id": request.prd_id,
+            "results": enriched_results,
+            "count": len(enriched_results),
+            "coverage": coverage,
+            "include_types": include_types,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting unified context: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/traceability/full/{chunk_id}")
+async def get_full_traceability(chunk_id: str, depth: int = 3):
+    """
+    Get complete traceability for a chunk.
+
+    Returns all related artifacts: dependencies, tests, documentation,
+    designs, and code implementations.
+    """
+    try:
+        if not orchestrator.graph_service:
+            raise HTTPException(status_code=503, detail="Graph service not available")
+
+        traceability = orchestrator.graph_service.get_full_traceability(chunk_id, depth=depth)
+        return traceability
+
+    except Exception as e:
+        logger.error(f"Error getting traceability: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# AI SETTINGS & CONFIGURATION
+# =============================================================================
+
+class AISettingsRequest(BaseModel):
+    """Request model for updating AI settings."""
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    default_test_framework: Optional[str] = None
+
+
+@router.get("/ai/settings")
+async def get_ai_settings():
+    """
+    Get current AI configuration settings.
+    """
+    return {
+        "model": settings.OPENROUTER_MODEL,
+        "temperature": settings.AI_TEMPERATURE,
+        "max_tokens": settings.AI_MAX_TOKENS,
+        "default_test_framework": settings.DEFAULT_TEST_FRAMEWORK,
+        "usage_tracking_enabled": settings.USAGE_TRACKING_ENABLED,
+    }
+
+
+@router.put("/ai/settings")
+async def update_ai_settings(request: AISettingsRequest):
+    """
+    Update AI configuration settings.
+
+    These settings are stored in the shared credentials file and
+    loaded as environment variables on startup.
+    """
+    import json
+    from pathlib import Path
+
+    # Load existing config
+    config_path = Path.home() / ".controlvector" / "ai_config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    config = {}
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+        except:
+            pass
+
+    # Update with new values
+    if request.model is not None:
+        config["model"] = request.model
+        settings.OPENROUTER_MODEL = request.model
+        os.environ["OPENROUTER_MODEL"] = request.model
+
+    if request.temperature is not None:
+        config["temperature"] = request.temperature
+        settings.AI_TEMPERATURE = request.temperature
+        os.environ["AI_TEMPERATURE"] = str(request.temperature)
+
+    if request.max_tokens is not None:
+        config["max_tokens"] = request.max_tokens
+        settings.AI_MAX_TOKENS = request.max_tokens
+        os.environ["AI_MAX_TOKENS"] = str(request.max_tokens)
+
+    if request.default_test_framework is not None:
+        config["default_test_framework"] = request.default_test_framework
+        settings.DEFAULT_TEST_FRAMEWORK = request.default_test_framework
+        os.environ["DEFAULT_TEST_FRAMEWORK"] = request.default_test_framework
+
+    # Save config
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+    return {
+        "success": True,
+        "settings": {
+            "model": settings.OPENROUTER_MODEL,
+            "temperature": settings.AI_TEMPERATURE,
+            "max_tokens": settings.AI_MAX_TOKENS,
+            "default_test_framework": settings.DEFAULT_TEST_FRAMEWORK,
+        }
+    }
+
+
+@router.get("/ai/models")
+async def get_available_models():
+    """
+    Get list of available AI models with pricing info.
+    """
+    from app.services.usage_tracking_service import AVAILABLE_MODELS, MODEL_PRICING
+
+    models = []
+    for model in AVAILABLE_MODELS:
+        pricing = MODEL_PRICING.get(model["id"], MODEL_PRICING["default"])
+        models.append({
+            **model,
+            "pricing": {
+                "input_per_1m": pricing["input"],
+                "output_per_1m": pricing["output"],
+            }
+        })
+
+    return {
+        "models": models,
+        "current_model": settings.OPENROUTER_MODEL,
+    }
+
+
+# =============================================================================
+# USAGE TRACKING
+# =============================================================================
+
+@router.get("/usage/summary")
+async def get_usage_summary(
+    user_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    days: int = 30,
+):
+    """
+    Get usage summary for a user or project.
+
+    Args:
+        user_id: Filter by user ID
+        project_id: Filter by project ID (PRD ID)
+        days: Number of days to include (default: 30)
+    """
+    from app.services.usage_tracking_service import get_usage_service
+
+    if not settings.USAGE_TRACKING_ENABLED:
+        return {"error": "Usage tracking is disabled", "enabled": False}
+
+    usage_service = get_usage_service()
+    summary = usage_service.get_usage_summary(
+        user_id=user_id,
+        project_id=project_id,
+        days=days,
+    )
+
+    return summary
+
+
+@router.get("/usage/details")
+async def get_usage_details(
+    user_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    days: int = 7,
+    limit: int = 100,
+):
+    """
+    Get detailed usage records.
+
+    Args:
+        user_id: Filter by user ID
+        project_id: Filter by project ID (PRD ID)
+        days: Number of days to include (default: 7)
+        limit: Maximum records to return (default: 100)
+    """
+    from app.services.usage_tracking_service import get_usage_service
+
+    if not settings.USAGE_TRACKING_ENABLED:
+        return {"error": "Usage tracking is disabled", "enabled": False}
+
+    usage_service = get_usage_service()
+    details = usage_service.get_usage_details(
+        user_id=user_id,
+        project_id=project_id,
+        days=days,
+        limit=limit,
+    )
+
+    return {"records": details, "count": len(details)}
+
+
+@router.get("/usage/project/{prd_id}")
+async def get_project_usage(prd_id: str, days: int = 30):
+    """
+    Get usage summary for a specific PRD/project.
+    """
+    from app.services.usage_tracking_service import get_usage_service
+
+    if not settings.USAGE_TRACKING_ENABLED:
+        return {"error": "Usage tracking is disabled", "enabled": False}
+
+    usage_service = get_usage_service()
+    return usage_service.get_project_usage(prd_id, days=days)
+
+
+@router.get("/usage/estimate")
+async def estimate_cost(
+    model: str,
+    tokens_in: int,
+    tokens_out: int,
+):
+    """
+    Estimate cost for a given model and token count.
+    """
+    from app.services.usage_tracking_service import UsageTrackingService
+
+    cost = UsageTrackingService.estimate_cost(model, tokens_in, tokens_out)
+    pricing = UsageTrackingService.get_model_pricing(model)
+
+    return {
+        "model": model,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "estimated_cost_usd": cost,
+        "pricing": pricing,
+    }
+
+
+# =========================================================================
+# Feature Request Endpoints (Progressive PRD Workflow)
+# =========================================================================
+
+from app.models.request_models import (
+    FeatureRequestCreate,
+    FeatureRequestResponse,
+    FeatureRequestListResponse,
+    FeatureRequestCreateResponse,
+    TriageAccept,
+    TriageReject,
+    TriageMerge,
+    TriageRequestInfo,
+    ElaborateRequest,
+    TriageActionResponse,
+    ElaborateResponse,
+)
+from app.services.feature_request_service import get_feature_request_service
+
+
+@router.post("/requests", response_model=FeatureRequestCreateResponse)
+async def create_feature_request(data: FeatureRequestCreate):
+    """
+    Create a new feature request (typically from cv-hub).
+
+    The request will be:
+    1. Saved to the database
+    2. Enriched with AI analysis (categorization, summary, skeleton)
+    3. Indexed for similarity search
+
+    Returns the created request with AI analysis.
+    """
+    service = get_feature_request_service()
+
+    try:
+        request = service.create_request(data, enrich_with_ai=True)
+
+        # Build AI analysis response
+        ai_analysis = None
+        if request.ai_summary:
+            ai_analysis = {
+                "summary": request.ai_summary,
+                "request_type": request.request_type,
+                "category": request.category,
+                "priority_suggestion": request.priority_suggestion,
+                "tags": request.tags or [],
+                "similar_requests": request.similar_requests or [],
+                "related_prds": request.related_prds or [],
+                "related_chunks": request.related_chunks or [],
+                "prd_skeleton": request.prd_skeleton,
+            }
+
+        return FeatureRequestCreateResponse(
+            id=request.id,
+            external_id=request.external_id,
+            status=request.status,
+            ai_analysis=ai_analysis,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to create feature request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/requests", response_model=FeatureRequestListResponse)
+async def list_feature_requests(
+    status: Optional[str] = None,
+    requester_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """
+    List feature requests with optional filters.
+
+    - status: Filter by status (raw, under_review, accepted, rejected, etc.)
+    - requester_id: Filter by requester (cv-hub user ID)
+    """
+    service = get_feature_request_service()
+    requests, total = service.list_requests(
+        status=status,
+        requester_id=requester_id,
+        page=page,
+        page_size=page_size,
+    )
+
+    return FeatureRequestListResponse(
+        requests=[FeatureRequestResponse(**r.to_dict()) for r in requests],
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=(page * page_size) < total,
+    )
+
+
+@router.get("/requests/{request_id}", response_model=FeatureRequestResponse)
+async def get_feature_request(request_id: str):
+    """Get a feature request by ID."""
+    service = get_feature_request_service()
+    request = service.get_request(request_id)
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Feature request not found")
+
+    return FeatureRequestResponse(**request.to_dict())
+
+
+@router.get("/requests/by-external-id/{external_id}", response_model=FeatureRequestResponse)
+async def get_feature_request_by_external_id(external_id: str):
+    """
+    Get a feature request by external ID (cv-hub reference).
+
+    This is the primary way cv-hub checks request status.
+    """
+    service = get_feature_request_service()
+    request = service.get_request_by_external_id(external_id)
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Feature request not found")
+
+    return FeatureRequestResponse(**request.to_dict())
+
+
+@router.post("/requests/{request_id}/start-review", response_model=TriageActionResponse)
+async def start_review(request_id: str, reviewer_id: str):
+    """
+    Mark a request as under review.
+
+    Call this when a reviewer starts looking at a request.
+    """
+    service = get_feature_request_service()
+    request = service.start_review(request_id, reviewer_id)
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Feature request not found")
+
+    return TriageActionResponse(
+        id=request.id,
+        status=request.status,
+        message="Request is now under review",
+    )
+
+
+@router.post("/requests/{request_id}/accept", response_model=TriageActionResponse)
+async def accept_request(request_id: str, data: TriageAccept, reviewer_id: str):
+    """
+    Accept a feature request.
+
+    After acceptance, the request can be elaborated into a full PRD.
+    """
+    service = get_feature_request_service()
+    request = service.accept_request(
+        request_id,
+        reviewer_id,
+        data.reviewer_notes,
+        data.priority,
+    )
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Feature request not found")
+
+    return TriageActionResponse(
+        id=request.id,
+        status=request.status,
+        message="Request has been accepted",
+    )
+
+
+@router.post("/requests/{request_id}/reject", response_model=TriageActionResponse)
+async def reject_request(request_id: str, data: TriageReject, reviewer_id: str):
+    """
+    Reject a feature request.
+
+    Provide a reason so the requester understands why.
+    """
+    service = get_feature_request_service()
+    request = service.reject_request(
+        request_id,
+        reviewer_id,
+        data.rejection_reason,
+    )
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Feature request not found")
+
+    return TriageActionResponse(
+        id=request.id,
+        status=request.status,
+        message="Request has been rejected",
+    )
+
+
+@router.post("/requests/{request_id}/merge", response_model=TriageActionResponse)
+async def merge_request(request_id: str, data: TriageMerge, reviewer_id: str):
+    """
+    Merge a feature request into another.
+
+    Use this when two requests are essentially the same.
+    """
+    service = get_feature_request_service()
+    request = service.merge_request(
+        request_id,
+        data.merge_into_request_id,
+        reviewer_id,
+        data.reviewer_notes,
+    )
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Feature request not found")
+
+    return TriageActionResponse(
+        id=request.id,
+        status=request.status,
+        message=f"Request has been merged into {data.merge_into_request_id}",
+    )
+
+
+@router.post("/requests/{request_id}/elaborate", response_model=ElaborateResponse)
+async def elaborate_request(request_id: str, data: ElaborateRequest):
+    """
+    Convert an accepted feature request into a full PRD.
+
+    This creates a new PRD document based on the request content
+    and AI-generated skeleton.
+    """
+    service = get_feature_request_service()
+    result = service.elaborate_to_prd(
+        request_id,
+        use_skeleton=data.use_skeleton,
+        additional_sections=data.additional_sections,
+        prd_name=data.prd_name,
+    )
+
+    if not result:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot elaborate request. Ensure it exists and has been accepted.",
+        )
+
+    return ElaborateResponse(**result)

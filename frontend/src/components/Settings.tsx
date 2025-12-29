@@ -6,7 +6,27 @@ interface SettingsProps {
   onClose: () => void
 }
 
-type SettingsTab = 'credentials' | 'account'
+interface AIModel {
+  id: string
+  name: string
+  provider: string
+  tier: string
+  pricing: {
+    input_per_1m: number
+    output_per_1m: number
+  }
+}
+
+interface UsageSummary {
+  period_days: number
+  total_requests: number
+  total_tokens: number
+  total_cost_usd: number
+  by_model: Record<string, { requests: number; tokens: number; cost_usd: number }>
+  by_endpoint: Record<string, { requests: number; tokens: number; cost_usd: number }>
+}
+
+type SettingsTab = 'credentials' | 'ai' | 'usage' | 'account'
 
 export function Settings({ isOpen, onClose }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('credentials')
@@ -19,6 +39,20 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null)
 
+  // AI Settings state
+  const [models, setModels] = useState<AIModel[]>([])
+  const [selectedModel, setSelectedModel] = useState('')
+  const [temperature, setTemperature] = useState(0.7)
+  const [maxTokens, setMaxTokens] = useState(4000)
+  const [testFramework, setTestFramework] = useState('pytest')
+  const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
+  const [aiSettingsSaved, setAiSettingsSaved] = useState(false)
+
+  // Usage state
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null)
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [usageDays, setUsageDays] = useState(30)
+
   // Auth state
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [username, setUsername] = useState('')
@@ -30,16 +64,20 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
 
   useEffect(() => {
     if (isOpen) {
-      // Load credentials from shared store
       loadSharedCredentials()
-      // Check if user is logged in
       checkAuth()
+      loadAISettings()
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (isOpen && activeTab === 'usage') {
+      loadUsageSummary()
+    }
+  }, [isOpen, activeTab, usageDays])
+
   const loadSharedCredentials = async () => {
     try {
-      // First try to load raw credentials from backend (populates env vars)
       const response = await fetch('http://127.0.0.1:8000/api/v1/credentials/raw')
       if (response.ok) {
         const creds = await response.json()
@@ -49,12 +87,49 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         if (creds.github_token) setGithubToken(creds.github_token)
       }
     } catch {
-      // Fall back to localStorage
       const savedKey = localStorage.getItem('openrouter_api_key')
       if (savedKey) setApiKey(savedKey)
       const savedFigma = localStorage.getItem('figma_api_token')
       if (savedFigma) setFigmaToken(savedFigma)
     }
+  }
+
+  const loadAISettings = async () => {
+    try {
+      // Load available models
+      const modelsResponse = await fetch('http://127.0.0.1:8000/api/v1/ai/models')
+      if (modelsResponse.ok) {
+        const data = await modelsResponse.json()
+        setModels(data.models)
+        setSelectedModel(data.current_model)
+      }
+
+      // Load current settings
+      const settingsResponse = await fetch('http://127.0.0.1:8000/api/v1/ai/settings')
+      if (settingsResponse.ok) {
+        const settings = await settingsResponse.json()
+        setSelectedModel(settings.model)
+        setTemperature(settings.temperature)
+        setMaxTokens(settings.max_tokens)
+        setTestFramework(settings.default_test_framework)
+      }
+    } catch (e) {
+      console.error('Failed to load AI settings:', e)
+    }
+  }
+
+  const loadUsageSummary = async () => {
+    setUsageLoading(true)
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/v1/usage/summary?days=${usageDays}`)
+      if (response.ok) {
+        const data = await response.json()
+        setUsageSummary(data)
+      }
+    } catch (e) {
+      console.error('Failed to load usage summary:', e)
+    }
+    setUsageLoading(false)
   }
 
   const checkAuth = async () => {
@@ -70,14 +145,12 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
           setCurrentUser(data.username)
         }
       } catch {
-        // Token invalid, clear it
         localStorage.removeItem('auth_token')
       }
     }
   }
 
   const handleSave = async () => {
-    // Save to shared ControlVector credentials
     try {
       await fetch('http://127.0.0.1:8000/api/v1/credentials', {
         method: 'PUT',
@@ -90,38 +163,55 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         })
       })
     } catch {
-      // Fall back to localStorage only
       localStorage.setItem('openrouter_api_key', apiKey)
       localStorage.setItem('figma_api_token', figmaToken)
-
-      // Still try to set on backend env
       fetch('http://127.0.0.1:8000/api/v1/settings/openrouter-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: apiKey })
       }).catch(() => {})
     }
-
     onClose()
+  }
+
+  const handleSaveAISettings = async () => {
+    setAiSettingsLoading(true)
+    setAiSettingsSaved(false)
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/ai/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: selectedModel,
+          temperature: temperature,
+          max_tokens: maxTokens,
+          default_test_framework: testFramework
+        })
+      })
+      if (response.ok) {
+        setAiSettingsSaved(true)
+        setTimeout(() => setAiSettingsSaved(false), 3000)
+      }
+    } catch (e) {
+      console.error('Failed to save AI settings:', e)
+    }
+    setAiSettingsLoading(false)
   }
 
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
-
     try {
       const response = await fetch('http://127.0.0.1:8000/api/v1/settings/test-openrouter-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: apiKey })
       })
-
       const data = await response.json()
       setTestResult(data.status === 'success' ? 'success' : 'error')
     } catch {
       setTestResult('error')
     }
-
     setTesting(false)
   }
 
@@ -133,13 +223,11 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       })
-
       if (!response.ok) {
         const data = await response.json()
         setAuthError(data.detail || 'Login failed')
         return
       }
-
       const data = await response.json()
       localStorage.setItem('auth_token', data.token)
       setIsLoggedIn(true)
@@ -158,13 +246,11 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, email: email || null })
       })
-
       if (!response.ok) {
         const data = await response.json()
         setAuthError(data.detail || 'Registration failed')
         return
       }
-
       const data = await response.json()
       localStorage.setItem('auth_token', data.token)
       setIsLoggedIn(true)
@@ -189,6 +275,18 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     setCurrentUser(null)
   }
 
+  const formatCost = (cost: number) => {
+    return cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`
+  }
+
+  const getModelPrice = (modelId: string) => {
+    const model = models.find(m => m.id === modelId)
+    if (model) {
+      return `$${model.pricing.input_per_1m}/${model.pricing.output_per_1m} per 1M tokens`
+    }
+    return ''
+  }
+
   if (!isOpen) return null
 
   return (
@@ -205,6 +303,18 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
             onClick={() => setActiveTab('credentials')}
           >
             API Keys
+          </button>
+          <button
+            className={activeTab === 'ai' ? 'active' : ''}
+            onClick={() => setActiveTab('ai')}
+          >
+            AI Settings
+          </button>
+          <button
+            className={activeTab === 'usage' ? 'active' : ''}
+            onClick={() => setActiveTab('usage')}
+          >
+            Usage
           </button>
           <button
             className={activeTab === 'account' ? 'active' : ''}
@@ -244,10 +354,10 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                   </div>
 
                   {testResult === 'success' && (
-                    <span className="test-result success">✓ API key is valid</span>
+                    <span className="test-result success">API key is valid</span>
                   )}
                   {testResult === 'error' && (
-                    <span className="test-result error">✗ Invalid API key</span>
+                    <span className="test-result error">Invalid API key</span>
                   )}
                 </div>
               </div>
@@ -311,6 +421,212 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                   Credentials are saved to <code>~/.controlvector/credentials.json</code> and shared with cv-git.
                 </p>
               </div>
+            </>
+          )}
+
+          {activeTab === 'ai' && (
+            <>
+              <div className="settings-section">
+                <h3>AI Model</h3>
+                <p className="settings-description">
+                  Select the AI model to use for test generation, documentation, and other AI features.
+                </p>
+
+                <div className="form-group">
+                  <label htmlFor="model-select">Model</label>
+                  <select
+                    id="model-select"
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="model-select"
+                  >
+                    {models.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({model.provider}) - {model.tier}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedModel && (
+                    <span className="model-price">{getModelPrice(selectedModel)}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Generation Settings</h3>
+
+                <div className="form-group">
+                  <label htmlFor="temperature">
+                    Temperature: {temperature.toFixed(2)}
+                  </label>
+                  <input
+                    id="temperature"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={temperature}
+                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                    className="slider"
+                  />
+                  <div className="slider-labels">
+                    <span>Precise</span>
+                    <span>Creative</span>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="max-tokens">Max Tokens: {maxTokens}</label>
+                  <input
+                    id="max-tokens"
+                    type="range"
+                    min="1000"
+                    max="8000"
+                    step="500"
+                    value={maxTokens}
+                    onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                    className="slider"
+                  />
+                  <div className="slider-labels">
+                    <span>1000</span>
+                    <span>8000</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Test Generation</h3>
+
+                <div className="form-group">
+                  <label htmlFor="test-framework">Default Test Framework</label>
+                  <select
+                    id="test-framework"
+                    value={testFramework}
+                    onChange={(e) => setTestFramework(e.target.value)}
+                  >
+                    <option value="pytest">pytest (Python)</option>
+                    <option value="jest">Jest (JavaScript/TypeScript)</option>
+                    <option value="vitest">Vitest (JavaScript/TypeScript)</option>
+                    <option value="mocha">Mocha (JavaScript)</option>
+                    <option value="go_test">Go Test</option>
+                    <option value="rust_test">Rust Test</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="settings-actions">
+                <button
+                  className="btn-primary"
+                  onClick={handleSaveAISettings}
+                  disabled={aiSettingsLoading}
+                >
+                  {aiSettingsLoading ? 'Saving...' : 'Save AI Settings'}
+                </button>
+                {aiSettingsSaved && (
+                  <span className="save-success">Settings saved!</span>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'usage' && (
+            <>
+              <div className="settings-section">
+                <h3>API Usage</h3>
+                <p className="settings-description">
+                  Track your AI API usage and costs.
+                </p>
+
+                <div className="form-group">
+                  <label htmlFor="usage-days">Time Period</label>
+                  <select
+                    id="usage-days"
+                    value={usageDays}
+                    onChange={(e) => setUsageDays(parseInt(e.target.value))}
+                  >
+                    <option value="7">Last 7 days</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                  </select>
+                </div>
+              </div>
+
+              {usageLoading ? (
+                <div className="usage-loading">Loading usage data...</div>
+              ) : usageSummary ? (
+                <>
+                  <div className="usage-summary">
+                    <div className="usage-stat">
+                      <span className="usage-stat-value">{usageSummary.total_requests}</span>
+                      <span className="usage-stat-label">Total Requests</span>
+                    </div>
+                    <div className="usage-stat">
+                      <span className="usage-stat-value">{usageSummary.total_tokens.toLocaleString()}</span>
+                      <span className="usage-stat-label">Total Tokens</span>
+                    </div>
+                    <div className="usage-stat highlight">
+                      <span className="usage-stat-value">{formatCost(usageSummary.total_cost_usd)}</span>
+                      <span className="usage-stat-label">Estimated Cost</span>
+                    </div>
+                  </div>
+
+                  {Object.keys(usageSummary.by_model).length > 0 && (
+                    <div className="settings-section">
+                      <h4>By Model</h4>
+                      <table className="usage-table">
+                        <thead>
+                          <tr>
+                            <th>Model</th>
+                            <th>Requests</th>
+                            <th>Tokens</th>
+                            <th>Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(usageSummary.by_model).map(([model, stats]) => (
+                            <tr key={model}>
+                              <td>{model.split('/')[1] || model}</td>
+                              <td>{stats.requests}</td>
+                              <td>{stats.tokens.toLocaleString()}</td>
+                              <td>{formatCost(stats.cost_usd)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {Object.keys(usageSummary.by_endpoint).length > 0 && (
+                    <div className="settings-section">
+                      <h4>By Feature</h4>
+                      <table className="usage-table">
+                        <thead>
+                          <tr>
+                            <th>Feature</th>
+                            <th>Requests</th>
+                            <th>Tokens</th>
+                            <th>Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(usageSummary.by_endpoint).map(([endpoint, stats]) => (
+                            <tr key={endpoint}>
+                              <td>{endpoint.replace(/_/g, ' ')}</td>
+                              <td>{stats.requests}</td>
+                              <td>{stats.tokens.toLocaleString()}</td>
+                              <td>{formatCost(stats.cost_usd)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="usage-empty">
+                  <p>No usage data yet. Start using AI features to see your usage here.</p>
+                </div>
+              )}
             </>
           )}
 

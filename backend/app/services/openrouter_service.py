@@ -9,10 +9,20 @@ logger = logging.getLogger(__name__)
 class OpenRouterService:
     """Service for interacting with OpenRouter LLM API"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ):
         self.api_key = settings.OPENROUTER_API_KEY
         self.api_url = settings.OPENROUTER_API_URL
         self.model = settings.OPENROUTER_MODEL
+        self.temperature = settings.AI_TEMPERATURE
+        self.max_tokens = settings.AI_MAX_TOKENS
+
+        # Context for usage tracking
+        self.user_id = user_id
+        self.project_id = project_id
 
         if not self.api_key:
             logger.warning("OpenRouter API key not configured")
@@ -22,24 +32,34 @@ class OpenRouterService:
     async def chat_completion(
         self,
         messages: List[Dict[str, str]],
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        endpoint: str = "chat_completion",
     ) -> str:
         """
         Send a chat completion request to OpenRouter
 
         Args:
             messages: List of message dicts with 'role' and 'content'
-            temperature: Sampling temperature (0-1)
-            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature (0-1), defaults to configured value
+            max_tokens: Maximum tokens to generate, defaults to configured value
             model: Override default model
+            endpoint: Name of the calling endpoint for usage tracking
 
         Returns:
             Response text from the LLM
         """
         if not self.api_key:
             raise ValueError("OpenRouter API key not configured")
+
+        # Use configured defaults if not specified
+        if temperature is None:
+            temperature = self.temperature
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
+        used_model = model or self.model
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -49,13 +69,11 @@ class OpenRouterService:
         }
 
         payload = {
-            "model": model or self.model,
+            "model": used_model,
             "messages": messages,
             "temperature": temperature,
+            "max_tokens": max_tokens,
         }
-
-        if max_tokens:
-            payload["max_tokens"] = max_tokens
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -67,7 +85,33 @@ class OpenRouterService:
                 response.raise_for_status()
 
                 result = response.json()
-                return result["choices"][0]["message"]["content"]
+                content = result["choices"][0]["message"]["content"]
+
+                # Track usage if enabled
+                if settings.USAGE_TRACKING_ENABLED:
+                    try:
+                        usage = result.get("usage", {})
+                        tokens_in = usage.get("prompt_tokens", 0)
+                        tokens_out = usage.get("completion_tokens", 0)
+
+                        from app.services.usage_tracking_service import get_usage_service
+                        usage_service = get_usage_service()
+                        usage_service.log_usage(
+                            user_id=self.user_id,
+                            project_id=self.project_id,
+                            model=used_model,
+                            endpoint=endpoint,
+                            tokens_in=tokens_in,
+                            tokens_out=tokens_out,
+                            metadata={
+                                "temperature": temperature,
+                                "max_tokens": max_tokens,
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to log usage: {e}")
+
+                return content
 
         except httpx.HTTPStatusError as e:
             logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")

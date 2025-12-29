@@ -68,6 +68,12 @@ async def root():
     }
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "cvPRD"}
+
+
 @app.on_event("startup")
 async def startup_event():
     """Startup event handler"""

@@ -110,30 +110,31 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
       ) : (
         <div className="prd-grid">
           {prds.map((prd) => (
-            <div key={prd.id} className="prd-card">
-              <div className="prd-card-content" onClick={() => onSelectPRD(prd.id)} style={{ cursor: 'pointer' }}>
+            <div key={prd.id} className="prd-card" onClick={() => onSelectPRD(prd.id)}>
+              <div className="prd-card-content">
                 <h3>{prd.name}</h3>
-                {prd.description && <p>{prd.description}</p>}
+                {prd.description && <p className="prd-description">{prd.description}</p>}
                 <div className="prd-stats">
                   <span className="stat">
-                    <strong>{prd.chunk_count}</strong> chunks
+                    <strong>{prd.chunk_count}</strong> requirements
                   </span>
                 </div>
-                <div className="prd-click-hint">
-                  👁️ Click to view details
-                </div>
               </div>
-              <div className="prd-actions">
+              <div className="prd-card-cta">
+                <span className="cta-text">Open PRD</span>
+                <span className="cta-arrow">→</span>
+              </div>
+              <div className="prd-quick-actions">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     handleViewMarkdown(prd.id)
                   }}
                   disabled={loadingViewer === prd.id}
-                  className="btn-secondary"
-                  style={{ marginTop: '10px' }}
+                  className="btn-sm"
+                  title="Quick preview"
                 >
-                  {loadingViewer === prd.id ? 'Loading...' : '📝 View Markdown'}
+                  {loadingViewer === prd.id ? '...' : 'Preview'}
                 </button>
                 <button
                   onClick={(e) => {
@@ -141,10 +142,10 @@ export function PRDList({ onSelectPRD }: PRDListProps) {
                     handleOptimize(prd.id, prd.name)
                   }}
                   disabled={optimizingPRD === prd.id}
-                  className="btn-primary"
-                  style={{ marginTop: '10px' }}
+                  className="btn-sm btn-optimize"
+                  title="Optimize for AI"
                 >
-                  {optimizingPRD === prd.id ? 'Optimizing...' : '🤖 Optimize for AI'}
+                  {optimizingPRD === prd.id ? '...' : 'Optimize'}
                 </button>
               </div>
             </div>
