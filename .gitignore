@@ -46,9 +46,10 @@ dist/
 build/
 *.tsbuildinfo
 
-# Model cache
+# Model cache (ML models, not Python models)
 .cache/
 models/
+!backend/app/models/
 
 # Temporary files
 tmp/

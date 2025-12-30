@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     # Usage Tracking
     USAGE_TRACKING_ENABLED: bool = os.getenv("USAGE_TRACKING_ENABLED", "true").lower() == "true"
 
+    # Bug Reporting (cv-Hub integration)
+    BUG_REPORTING_ENABLED: bool = os.getenv("BUG_REPORTING_ENABLED", "true").lower() == "true"
+    CV_HUB_URL: str = os.getenv("CV_HUB_URL", "https://hub.controlvector.io")
+    CV_PROJECT_ID: str = os.getenv("CV_PROJECT_ID", "")
+    CV_PROJECT_NAME: str = os.getenv("CV_PROJECT_NAME", "cv-prd")
+    CV_HUB_API_KEY: str = os.getenv("CV_HUB_API_KEY", "")
+    CV_HUB_SECRET_KEY: str = os.getenv("CV_HUB_SECRET_KEY", "")
+
     # Security
     SECRET_KEY: str = "dev-secret-key-change-in-production"
     ALGORITHM: str = "HS256"

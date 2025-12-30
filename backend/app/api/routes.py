@@ -2492,3 +2492,82 @@ async def elaborate_request(request_id: str, data: ElaborateRequest):
         )
 
     return ElaborateResponse(**result)
+
+
+# =============================================================================
+# Bug Reporting Endpoints
+# =============================================================================
+
+from app.services.bug_reporting_service import get_bug_service
+from app.models.bug_report_models import (
+    BugReportResponse,
+    FrontendErrorReport,
+    CustomerComplaint,
+)
+
+
+@router.post("/bugs/frontend", response_model=BugReportResponse)
+async def report_frontend_error(report: FrontendErrorReport):
+    """
+    Receive frontend error reports from React/Electron.
+
+    Called automatically by the frontend error boundary.
+    """
+    bug_service = get_bug_service()
+
+    report_id = bug_service.report_frontend_error(
+        error_type=report.error_type,
+        message=report.message,
+        stack_trace=report.stack_trace,
+        component=report.component,
+        url=report.url,
+        user_action=report.user_action,
+        is_react_crash=report.is_react_crash,
+        breadcrumbs=report.breadcrumbs,
+    )
+
+    if report_id:
+        return BugReportResponse(report_id=report_id, status="queued")
+    else:
+        return BugReportResponse(
+            report_id="", status="suppressed", message="Duplicate or disabled"
+        )
+
+
+@router.post("/bugs/complaint", response_model=BugReportResponse)
+async def submit_customer_complaint(complaint: CustomerComplaint, request: Request):
+    """
+    Submit a manual customer bug report.
+    """
+    bug_service = get_bug_service()
+
+    # Get user info if authenticated
+    user_id = None
+    user_email = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        session = sessions.get(token)
+        if session:
+            user_id = session.get("username")
+
+    report_id = bug_service.report_customer_complaint(
+        title=complaint.title,
+        description=complaint.description,
+        steps_to_reproduce=complaint.steps_to_reproduce,
+        expected_behavior=complaint.expected_behavior,
+        user_id=user_id,
+        user_email=user_email,
+    )
+
+    if report_id:
+        return BugReportResponse(report_id=report_id, status="submitted")
+    else:
+        return BugReportResponse(report_id="", status="disabled")
+
+
+@router.get("/bugs/config")
+async def get_bug_reporting_config():
+    """Get bug reporting configuration status."""
+    bug_service = get_bug_service()
+    return bug_service.get_status()

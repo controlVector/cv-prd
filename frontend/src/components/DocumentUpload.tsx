@@ -117,7 +117,19 @@ export function DocumentUpload() {
         fileInputRef.current.value = ''
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to upload document')
+      // Provide more specific error messages for common issues
+      let errorMessage = 'Failed to upload document'
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail
+      } else if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+        errorMessage = 'Cannot connect to backend server. Please ensure the application is running properly.'
+      } else if (err.message?.includes('CORS')) {
+        errorMessage = 'Connection blocked by browser security policy. Please restart the application.'
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      setError(errorMessage)
+      console.error('Document upload error:', err)
     } finally {
       setIsLoading(false)
     }
