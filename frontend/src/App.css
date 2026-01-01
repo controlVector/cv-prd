@@ -1274,3 +1274,120 @@ button {
   display: flex;
   gap: 0.75rem;
 }
+
+/* Update Notification */
+.update-notification {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, var(--cv-navy-light) 0%, var(--cv-navy) 100%);
+  border-bottom: 2px solid var(--cv-orange);
+  padding: 0.75rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  z-index: 1001;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.update-icon {
+  font-size: 1.5rem;
+}
+
+.update-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.update-text strong {
+  color: var(--cv-orange);
+  font-size: 0.95rem;
+}
+
+.update-text span {
+  color: var(--cv-text-muted);
+  font-size: 0.85rem;
+}
+
+.update-error {
+  background: rgba(232, 93, 117, 0.2);
+  color: var(--cv-coral);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  max-width: 300px;
+}
+
+.update-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--cv-gradient);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.update-progress span {
+  color: var(--cv-text-muted);
+  font-size: 0.85rem;
+  min-width: 40px;
+}
+
+.update-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.update-btn-install {
+  background: var(--cv-gradient);
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.update-btn-install:hover {
+  background: var(--cv-gradient-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
+}
+
+.update-btn-dismiss {
+  background: transparent;
+  color: var(--cv-text-muted);
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--cv-navy-lighter);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.update-btn-dismiss:hover {
+  border-color: var(--cv-text-muted);
+  color: var(--cv-text-light);
+}
+
+/* Adjust app layout when update notification is shown */
+.app:has(.update-notification) .app-header {
+  margin-top: 60px;
+}

@@ -1,8 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "CV-PRD",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "identifier": "com.controlvector.cv-prd",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://hub.controlvector.io/api/v1/updates/cv-prd/{{target}}/{{arch}}/{{current_version}}",
+        "http://localhost:3000/api/v1/updates/cv-prd/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkKUlVRPT0K"
+    }
+  },
   "build": {
     "frontendDist": "../frontend/dist",
     "devUrl": "http://localhost:5173",
@@ -23,7 +32,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:8000; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:8000 http://localhost:3000 https://hub.controlvector.io https://github.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {
