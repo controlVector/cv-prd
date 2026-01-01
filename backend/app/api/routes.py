@@ -998,6 +998,7 @@ async def health_check():
     """
     return {
         "status": "healthy",
+        "openrouter_configured": bool(settings.OPENROUTER_API_KEY),
         "services": {
             "vector_db": "connected",
             "graph_db": "connected" if orchestrator.graph_service else "disabled",

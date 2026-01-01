@@ -5,6 +5,8 @@ import { PRDList } from './components/PRDList'
 import { PRDDetail } from './components/PRDDetail'
 import { DocumentUpload } from './components/DocumentUpload'
 import { Settings } from './components/Settings'
+import { UpdateNotification } from './components/UpdateNotification'
+import { ApiKeyWarning } from './components/ApiKeyWarning'
 import './App.css'
 
 function App() {
@@ -16,6 +18,8 @@ function App() {
 
   return (
     <div className="app">
+      <UpdateNotification />
+      <ApiKeyWarning onOpenSettings={() => setShowSettings(true)} />
       <header className="app-header">
         <img src="/cvlogo.png" alt="ControlVector" className="app-logo" />
         <div className="app-header-content">
