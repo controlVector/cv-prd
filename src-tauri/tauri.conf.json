@@ -6,8 +6,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://hub.controlvector.io/api/v1/updates/cv-prd/{{target}}/{{arch}}/{{current_version}}",
-        "http://localhost:3000/api/v1/updates/cv-prd/{{target}}/{{arch}}/{{current_version}}"
+        "https://hub.controlvector.io/api/v1/updates/cv-prd/{{target}}/{{arch}}/{{current_version}}"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkKUlVRPT0K"
     }
