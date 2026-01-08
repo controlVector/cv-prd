@@ -1448,26 +1448,29 @@ class ExportRequest(BaseModel):
     export_type: str = "structure"  # structure, full
     prd_ids: Optional[List[str]] = None  # None = all PRDs
     project_name: Optional[str] = "cv-prd-export"
+    save_path: Optional[str] = None  # If provided, save directly to this path
 
 
 @router.post("/export")
 async def export_prds(request: ExportRequest):
     """
     Export PRDs in various formats
-    
+
     Formats:
     - cv: cv-git compatible (.cv directory with JSONL files)
     - md: Markdown document
     - pdf: PDF report (future)
-    
+
     Export types (for .cv format):
     - structure: Nodes and edges only (~100KB)
     - full: Include vector embeddings (~5-20MB)
+
+    If save_path is provided, saves directly to that path and returns JSON.
     """
     try:
         format_enum = ExportFormat(request.format.lower())
         type_enum = ExportType(request.export_type.lower())
-        
+
         if format_enum == ExportFormat.CV:
             # Export to .cv format
             export_dir = await export_service.export_cv(
@@ -1475,42 +1478,71 @@ async def export_prds(request: ExportRequest):
                 export_type=type_enum,
                 project_name=request.project_name or "cv-prd-export"
             )
-            
-            # Zip the directory for download
-            zip_path = f"{export_dir}.zip"
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(export_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, os.path.dirname(export_dir))
-                        zipf.write(file_path, arcname)
-            
-            # Clean up directory
-            shutil.rmtree(export_dir)
-            
-            return FileResponse(
-                path=zip_path,
-                filename=os.path.basename(zip_path),
-                media_type="application/zip"
-            )
-            
+
+            # Determine final filename
+            project_name = request.project_name or "cv-prd-export"
+            filename = f"{project_name}.cv.zip"
+
+            if request.save_path:
+                # Save directly to user-specified path
+                final_path = request.save_path
+                # Ensure parent directory exists
+                os.makedirs(os.path.dirname(final_path), exist_ok=True)
+
+                with zipfile.ZipFile(final_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(export_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, os.path.dirname(export_dir))
+                            zipf.write(file_path, arcname)
+
+                # Clean up temp directory
+                shutil.rmtree(export_dir)
+
+                return {"success": True, "path": final_path, "filename": filename}
+            else:
+                # Original behavior - return FileResponse
+                zip_path = f"{export_dir}.zip"
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(export_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, os.path.dirname(export_dir))
+                            zipf.write(file_path, arcname)
+
+                shutil.rmtree(export_dir)
+
+                return FileResponse(
+                    path=zip_path,
+                    filename=filename,
+                    media_type="application/zip"
+                )
+
         elif format_enum == ExportFormat.MARKDOWN:
             # Export to Markdown
             md_path = await export_service.export_markdown(
                 prd_ids=request.prd_ids
             )
-            return FileResponse(
-                path=md_path,
-                filename=os.path.basename(md_path),
-                media_type="text/markdown"
-            )
-            
+
+            if request.save_path:
+                final_path = request.save_path
+                os.makedirs(os.path.dirname(final_path), exist_ok=True)
+                shutil.copy(md_path, final_path)
+                os.unlink(md_path)
+                return {"success": True, "path": final_path, "filename": os.path.basename(final_path)}
+            else:
+                return FileResponse(
+                    path=md_path,
+                    filename=os.path.basename(md_path),
+                    media_type="text/markdown"
+                )
+
         else:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported export format: {request.format}"
             )
-            
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

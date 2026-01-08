@@ -1,0 +1,12 @@
+{"source":"file:frontend/src/components/ArtifactsPanel.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"generateTestSuite"],[2,"generateUserManual"],[2,"generateApiDocs"],[2,"generateTechnicalSpec"],[2,"getTestCoverage"],[2,"getDocumentationCoverage"],[2,"TestCase"],[2,"DocSection"]]}}
+{"source":"file:frontend/src/components/BugReportDialog.tsx","target":"file:frontend/src/utils/errorReporter.ts","type":"imports","metadata":{"symbols":[[2,"submitCustomerComplaint"]]}}
+{"source":"file:frontend/src/components/DocsPanel.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"generateUserManual"],[2,"generateApiDocs"],[2,"generateTechnicalSpec"],[2,"getDocumentationCoverage"],[2,"DocSection"]]}}
+{"source":"file:frontend/src/components/DocumentUpload.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"uploadDocument"]]}}
+{"source":"file:frontend/src/components/ExportDialog.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"getExportFormats"],[2,"exportPRDs"],[2,"ExportFormat"]]}}
+{"source":"file:frontend/src/components/MarkdownViewer.tsx","target":"file:frontend/src/utils/markdown-export.ts","type":"imports","metadata":{"symbols":[[2,"PRDData"]]}}
+{"source":"file:frontend/src/components/PRDDetail.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"getPRD"],[2,"optimizePRD"]]}}
+{"source":"file:frontend/src/components/PRDDetail.tsx","target":"file:frontend/src/utils/markdown-export.ts","type":"imports","metadata":{"symbols":[[2,"downloadMarkdown"],[2,"copyMarkdownToClipboard"]]}}
+{"source":"file:frontend/src/components/PRDForm.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"createPRD"]]}}
+{"source":"file:frontend/src/components/PRDList.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"listPRDs"],[2,"optimizePRD"],[2,"getPRD"]]}}
+{"source":"file:frontend/src/components/SearchInterface.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"searchSemantic"]]}}
+{"source":"file:frontend/src/components/TestsPanel.tsx","target":"file:frontend/src/services/api.ts","type":"imports","metadata":{"symbols":[[2,"generateTestSuite"],[2,"getTestCoverage"],[2,"getTestsForPrd"],[2,"TestCase"]]}}

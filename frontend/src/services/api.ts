@@ -114,6 +114,13 @@ export interface ExportRequest {
   export_type: string
   prd_ids?: string[]
   project_name?: string
+  save_path?: string
+}
+
+export interface ExportResponse {
+  success: boolean
+  path: string
+  filename: string
 }
 
 export const getExportFormats = async (): Promise<{ formats: ExportFormat[] }> => {
@@ -125,6 +132,11 @@ export const exportPRDs = async (request: ExportRequest): Promise<Blob> => {
   const response = await api.post('/export', request, {
     responseType: 'blob',
   })
+  return response.data
+}
+
+export const exportPRDsToPath = async (request: ExportRequest): Promise<ExportResponse> => {
+  const response = await api.post('/export', request)
   return response.data
 }
 

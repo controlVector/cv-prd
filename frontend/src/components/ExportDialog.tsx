@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getExportFormats, exportPRDs, ExportFormat } from '../services/api'
+import { save } from '@tauri-apps/plugin-dialog'
+import { getExportFormats, exportPRDsToPath, ExportFormat } from '../services/api'
 import type { PRDSummary } from '../types'
 
 interface ExportDialogProps {
@@ -14,10 +15,11 @@ export function ExportDialog({ isOpen, onClose, prds }: ExportDialogProps) {
   const [selectedType, setSelectedType] = useState<string>('structure')
   const [selectedPRDs, setSelectedPRDs] = useState<string[]>([])
   const [selectAll, setSelectAll] = useState<boolean>(true)
-  const [projectName, setProjectName] = useState<string>('cv-prd-export')
+  const [projectName, setProjectName] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isExporting, setIsExporting] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -25,6 +27,12 @@ export function ExportDialog({ isOpen, onClose, prds }: ExportDialogProps) {
       // Default to all PRDs selected
       setSelectedPRDs(prds.map(p => p.id))
       setSelectAll(true)
+      setSuccessMessage(null)
+      // Set default project name from first PRD, sanitized for filesystem
+      if (prds.length > 0 && !projectName) {
+        const defaultName = prds[0].name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        setProjectName(defaultName || 'cv-project')
+      }
     }
   }, [isOpen, prds])
 
@@ -66,32 +74,47 @@ export function ExportDialog({ isOpen, onClose, prds }: ExportDialogProps) {
   const handleExport = async () => {
     setIsExporting(true)
     setError(null)
+    setSuccessMessage(null)
 
     try {
-      const blob = await exportPRDs({
-        format: selectedFormat,
-        export_type: selectedType,
-        prd_ids: selectAll ? undefined : selectedPRDs,
-        project_name: projectName,
-      })
-
       // Determine filename based on format
       const extension = selectedFormat === 'cv' ? '.cv.zip' : `.${selectedFormat}`
       const filename = `${projectName}${extension}`
 
-      // Download the file
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // Show native save dialog to let user choose location
+      const savePath = await save({
+        defaultPath: filename,
+        filters: selectedFormat === 'cv'
+          ? [{ name: 'CV Export', extensions: ['zip'] }]
+          : selectedFormat === 'md'
+          ? [{ name: 'Markdown', extensions: ['md'] }]
+          : [{ name: 'PDF', extensions: ['pdf'] }],
+        title: 'Save Export As...',
+      })
 
-      onClose()
+      if (!savePath) {
+        // User cancelled
+        setIsExporting(false)
+        return
+      }
+
+      // Have backend save directly to chosen path
+      const result = await exportPRDsToPath({
+        format: selectedFormat,
+        export_type: selectedType,
+        prd_ids: selectAll ? undefined : selectedPRDs,
+        project_name: projectName,
+        save_path: savePath,
+      })
+
+      setSuccessMessage(`Saved to: ${result.path}`)
+
+      // Close dialog after brief delay
+      setTimeout(() => {
+        onClose()
+      }, 2000)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Export failed')
+      setError(err.response?.data?.detail || err.message || 'Export failed')
     } finally {
       setIsExporting(false)
     }
@@ -112,6 +135,8 @@ export function ExportDialog({ isOpen, onClose, prds }: ExportDialogProps) {
 
         {isLoading ? (
           <div className="loading">Loading export options...</div>
+        ) : successMessage ? (
+          <div className="success-message">{successMessage}</div>
         ) : error ? (
           <div className="error-message">{error}</div>
         ) : (
@@ -171,14 +196,17 @@ export function ExportDialog({ isOpen, onClose, prds }: ExportDialogProps) {
 
             {/* Project Name */}
             <div className="form-group">
-              <label htmlFor="projectName">Export Name</label>
+              <label htmlFor="projectName">Project Name</label>
               <input
                 type="text"
                 id="projectName"
                 value={projectName}
                 onChange={e => setProjectName(e.target.value)}
-                placeholder="cv-prd-export"
+                placeholder="my-project"
               />
+              <span className="field-hint">
+                This will be the folder name for cv-git import
+              </span>
             </div>
 
             {/* PRD Selection */}
@@ -212,8 +240,9 @@ export function ExportDialog({ isOpen, onClose, prds }: ExportDialogProps) {
             {selectedFormat === 'cv' && (
               <div className="export-hint">
                 <strong>cv-git Integration:</strong>
-                <p>After downloading, import into your repository:</p>
-                <code>cv import ./export-{projectName}.cv.zip</code>
+                <p>After downloading, create your project folder and import:</p>
+                <code>mkdir ~/project/{projectName} && cd ~/project/{projectName}</code>
+                <code>cv init -y && cv import ~/Downloads/{projectName}.cv.zip</code>
               </div>
             )}
           </div>

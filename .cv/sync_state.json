@@ -1,0 +1,18 @@
+{
+  "lastFullSync": 1767640887840,
+  "lastCommitSynced": "a69a00dc01dfb9e349cf241f62f8d1cf4a904132",
+  "fileCount": 714,
+  "symbolCount": 12045,
+  "nodeCount": 12759,
+  "edgeCount": 18385,
+  "vectorCount": 376,
+  "languages": {
+    "python": 36,
+    "typescript": 24,
+    "rust": 3
+  },
+  "syncDuration": 13.179,
+  "errors": [
+    "Failed to parse backend/app/api/routes.py: Invalid argument"
+  ]
+}

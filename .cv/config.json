@@ -1,0 +1,107 @@
+{
+  "version": "0.1.0",
+  "repository": {
+    "root": "/home/schmotz/project/cv-prd",
+    "name": "cv-prd",
+    "initDate": "2026-01-05T19:19:24.500Z"
+  },
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4",
+    "maxTokens": 4096,
+    "temperature": 0.2
+  },
+  "ai": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4",
+    "maxTokens": 4096,
+    "temperature": 0.2
+  },
+  "embedding": {
+    "provider": "openrouter",
+    "model": "openai/text-embedding-3-small",
+    "dimensions": 1536
+  },
+  "graph": {
+    "provider": "falkordb",
+    "url": "redis://localhost:6379",
+    "embedded": true,
+    "database": "cv-git"
+  },
+  "vector": {
+    "provider": "qdrant",
+    "url": "http://localhost:6334",
+    "embedded": true,
+    "collections": {
+      "codeChunks": "code_chunks",
+      "docstrings": "docstrings",
+      "commits": "commits",
+      "documentChunks": "document_chunks"
+    }
+  },
+  "sync": {
+    "autoSync": true,
+    "syncOnCommit": true,
+    "excludePatterns": [
+      "node_modules/**",
+      ".next/**",
+      ".nuxt/**",
+      "*.min.js",
+      "*.bundle.js",
+      "venv/**",
+      ".venv/**",
+      "env/**",
+      ".env/**",
+      "**/lib/python*/**",
+      "**/site-packages/**",
+      "__pycache__/**",
+      "*.pyc",
+      ".pytest_cache/**",
+      "*.egg-info/**",
+      "dist/**",
+      "build/**",
+      "out/**",
+      "target/**",
+      ".build/**",
+      "*.test.ts",
+      "*.test.js",
+      "*.spec.ts",
+      "*.spec.js",
+      "coverage/**",
+      ".git/**",
+      ".cache/**",
+      ".tmp/**",
+      "tmp/**",
+      ".idea/**",
+      ".vscode/**",
+      "vendor/**",
+      "third_party/**"
+    ],
+    "includeLanguages": [
+      "typescript",
+      "javascript",
+      "python",
+      "go",
+      "rust"
+    ]
+  },
+  "docs": {
+    "enabled": true,
+    "patterns": [
+      "**/*.md"
+    ],
+    "excludePatterns": [
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      ".git/**"
+    ],
+    "chunkByHeading": 2,
+    "inferTypes": true
+  },
+  "features": {
+    "enableChat": true,
+    "enableAutoCommit": false,
+    "enableTelemetry": false
+  }
+}

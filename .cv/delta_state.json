@@ -1,0 +1,455 @@
+{
+  "version": "1.0",
+  "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+  "lastCommit": "a69a00dc01dfb9e349cf241f62f8d1cf4a904132",
+  "files": {
+    "backend/app/__init__.py": {
+      "path": "backend/app/__init__.py",
+      "contentHash": "e3b0c44298fc1c14",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 0,
+      "type": "code"
+    },
+    "backend/app/api/__init__.py": {
+      "path": "backend/app/api/__init__.py",
+      "contentHash": "9e4465a14108263e",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 13,
+      "type": "code"
+    },
+    "backend/app/api/routes.py": {
+      "path": "backend/app/api/routes.py",
+      "contentHash": "e31e3d13c692cb7c",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 83921,
+      "type": "code"
+    },
+    "backend/app/core/__init__.py": {
+      "path": "backend/app/core/__init__.py",
+      "contentHash": "e3b0c44298fc1c14",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 0,
+      "type": "code"
+    },
+    "backend/app/core/config.py": {
+      "path": "backend/app/core/config.py",
+      "contentHash": "edf5904ee1ae7f5f",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 3072,
+      "type": "code"
+    },
+    "backend/app/main.py": {
+      "path": "backend/app/main.py",
+      "contentHash": "16592c21cadcf7bd",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 4001,
+      "type": "code"
+    },
+    "backend/app/models/__init__.py": {
+      "path": "backend/app/models/__init__.py",
+      "contentHash": "ff156ab234a8ea57",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 17,
+      "type": "code"
+    },
+    "backend/app/models/bug_report_models.py": {
+      "path": "backend/app/models/bug_report_models.py",
+      "contentHash": "725f9ed786f88e5c",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 5163,
+      "type": "code"
+    },
+    "backend/app/models/db_models.py": {
+      "path": "backend/app/models/db_models.py",
+      "contentHash": "74d1db6703ffa860",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 11849,
+      "type": "code"
+    },
+    "backend/app/models/prd_models.py": {
+      "path": "backend/app/models/prd_models.py",
+      "contentHash": "0c1e63517af22297",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 4606,
+      "type": "code"
+    },
+    "backend/app/models/request_models.py": {
+      "path": "backend/app/models/request_models.py",
+      "contentHash": "217a3d9fde3c930a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 7504,
+      "type": "code"
+    },
+    "backend/app/services/__init__.py": {
+      "path": "backend/app/services/__init__.py",
+      "contentHash": "e3b0c44298fc1c14",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 0,
+      "type": "code"
+    },
+    "backend/app/services/bug_reporting_service.py": {
+      "path": "backend/app/services/bug_reporting_service.py",
+      "contentHash": "cf22c01e2738931c",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 16325,
+      "type": "code"
+    },
+    "backend/app/services/chunking_service.py": {
+      "path": "backend/app/services/chunking_service.py",
+      "contentHash": "84e0b67a1b369dfb",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 6493,
+      "type": "code"
+    },
+    "backend/app/services/database_service.py": {
+      "path": "backend/app/services/database_service.py",
+      "contentHash": "56635a5e980c26f9",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 10232,
+      "type": "code"
+    },
+    "backend/app/services/design_service.py": {
+      "path": "backend/app/services/design_service.py",
+      "contentHash": "3170ef91d831ff6c",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 10383,
+      "type": "code"
+    },
+    "backend/app/services/doc_generation_service.py": {
+      "path": "backend/app/services/doc_generation_service.py",
+      "contentHash": "0ff85ba415de0e79",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 18828,
+      "type": "code"
+    },
+    "backend/app/services/document_parser.py": {
+      "path": "backend/app/services/document_parser.py",
+      "contentHash": "01b8a81724d54cf4",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 13441,
+      "type": "code"
+    },
+    "backend/app/services/embedding_service.py": {
+      "path": "backend/app/services/embedding_service.py",
+      "contentHash": "85428eb1f44bb64b",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 3135,
+      "type": "code"
+    },
+    "backend/app/services/export_service.py": {
+      "path": "backend/app/services/export_service.py",
+      "contentHash": "513ba28d45cabab7",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 12617,
+      "type": "code"
+    },
+    "backend/app/services/feature_request_service.py": {
+      "path": "backend/app/services/feature_request_service.py",
+      "contentHash": "5f7d20d3691b6f8a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 18513,
+      "type": "code"
+    },
+    "backend/app/services/graph_service.py": {
+      "path": "backend/app/services/graph_service.py",
+      "contentHash": "454c351393078ecd",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 28692,
+      "type": "code"
+    },
+    "backend/app/services/openrouter_service.py": {
+      "path": "backend/app/services/openrouter_service.py",
+      "contentHash": "2d160e02ed607502",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 9209,
+      "type": "code"
+    },
+    "backend/app/services/orchestrator.py": {
+      "path": "backend/app/services/orchestrator.py",
+      "contentHash": "3563e5e3295394bc",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 12335,
+      "type": "code"
+    },
+    "backend/app/services/prd_optimizer_service.py": {
+      "path": "backend/app/services/prd_optimizer_service.py",
+      "contentHash": "db0779e06af47f3a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 12366,
+      "type": "code"
+    },
+    "backend/app/services/test_generation_service.py": {
+      "path": "backend/app/services/test_generation_service.py",
+      "contentHash": "9b46dddca949327d",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 20071,
+      "type": "code"
+    },
+    "backend/app/services/usage_tracking_service.py": {
+      "path": "backend/app/services/usage_tracking_service.py",
+      "contentHash": "eecd676c193675e8",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 12224,
+      "type": "code"
+    },
+    "backend/app/services/vector_service.py": {
+      "path": "backend/app/services/vector_service.py",
+      "contentHash": "234663ca5a491588",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 6438,
+      "type": "code"
+    },
+    "backend/build_backend.py": {
+      "path": "backend/build_backend.py",
+      "contentHash": "7836eab69d8e7b15",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 2116,
+      "type": "code"
+    },
+    "backend/run.py": {
+      "path": "backend/run.py",
+      "contentHash": "5ec9ef7ccc25cc4d",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 594,
+      "type": "code"
+    },
+    "backend/run_server.py": {
+      "path": "backend/run_server.py",
+      "contentHash": "b31047955a1073ec",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 1963,
+      "type": "code"
+    },
+    "backend/tests/__init__.py": {
+      "path": "backend/tests/__init__.py",
+      "contentHash": "ea54199555e69662",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 15,
+      "type": "code"
+    },
+    "backend/tests/test_feature_request_api.py": {
+      "path": "backend/tests/test_feature_request_api.py",
+      "contentHash": "10bcf02196e02e25",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 11624,
+      "type": "code"
+    },
+    "backend/tests/test_feature_request_service.py": {
+      "path": "backend/tests/test_feature_request_service.py",
+      "contentHash": "cb6f842fcc6c6f97",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 13978,
+      "type": "code"
+    },
+    "backend/upload_document.py": {
+      "path": "backend/upload_document.py",
+      "contentHash": "27c56ca9925f5743",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 5091,
+      "type": "code"
+    },
+    "demo/demo.py": {
+      "path": "demo/demo.py",
+      "contentHash": "600b40556ebf631f",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 13823,
+      "type": "code"
+    },
+    "electron/main.js": {
+      "path": "electron/main.js",
+      "contentHash": "9c77396800dd04ec",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 7271,
+      "type": "code"
+    },
+    "electron/preload.js": {
+      "path": "electron/preload.js",
+      "contentHash": "bf0ac32fbcf89f23",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 553,
+      "type": "code"
+    },
+    "frontend/src/App.tsx": {
+      "path": "frontend/src/App.tsx",
+      "contentHash": "a0465296f22626d0",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 3237,
+      "type": "code"
+    },
+    "frontend/src/components/ApiKeyWarning.tsx": {
+      "path": "frontend/src/components/ApiKeyWarning.tsx",
+      "contentHash": "5c51d04652ab5ac7",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 2699,
+      "type": "code"
+    },
+    "frontend/src/components/ArtifactsPanel.tsx": {
+      "path": "frontend/src/components/ArtifactsPanel.tsx",
+      "contentHash": "821bf03a6b833847",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 12199,
+      "type": "code"
+    },
+    "frontend/src/components/BugReportDialog.tsx": {
+      "path": "frontend/src/components/BugReportDialog.tsx",
+      "contentHash": "dba98b9404442f75",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 6938,
+      "type": "code"
+    },
+    "frontend/src/components/DocsPanel.tsx": {
+      "path": "frontend/src/components/DocsPanel.tsx",
+      "contentHash": "256d259c34eafa4a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 6785,
+      "type": "code"
+    },
+    "frontend/src/components/DocumentUpload.tsx": {
+      "path": "frontend/src/components/DocumentUpload.tsx",
+      "contentHash": "08c6d68d1d3029a5",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 8140,
+      "type": "code"
+    },
+    "frontend/src/components/ErrorBoundary.tsx": {
+      "path": "frontend/src/components/ErrorBoundary.tsx",
+      "contentHash": "511da23310a83c73",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 4375,
+      "type": "code"
+    },
+    "frontend/src/components/ExportDialog.tsx": {
+      "path": "frontend/src/components/ExportDialog.tsx",
+      "contentHash": "b55e95177556cb7a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 7895,
+      "type": "code"
+    },
+    "frontend/src/components/MarkdownViewer.tsx": {
+      "path": "frontend/src/components/MarkdownViewer.tsx",
+      "contentHash": "541dc63b8a99fd86",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 2298,
+      "type": "code"
+    },
+    "frontend/src/components/PRDDetail.tsx": {
+      "path": "frontend/src/components/PRDDetail.tsx",
+      "contentHash": "021507fd42971131",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 8676,
+      "type": "code"
+    },
+    "frontend/src/components/PRDForm.tsx": {
+      "path": "frontend/src/components/PRDForm.tsx",
+      "contentHash": "51a581dae4f85d57",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 12261,
+      "type": "code"
+    },
+    "frontend/src/components/PRDList.tsx": {
+      "path": "frontend/src/components/PRDList.tsx",
+      "contentHash": "618aa81edb1ac385",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 5010,
+      "type": "code"
+    },
+    "frontend/src/components/SearchInterface.tsx": {
+      "path": "frontend/src/components/SearchInterface.tsx",
+      "contentHash": "bcac17557362b077",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 3104,
+      "type": "code"
+    },
+    "frontend/src/components/Settings.tsx": {
+      "path": "frontend/src/components/Settings.tsx",
+      "contentHash": "9e279f243f11a52a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 26764,
+      "type": "code"
+    },
+    "frontend/src/components/TestsPanel.tsx": {
+      "path": "frontend/src/components/TestsPanel.tsx",
+      "contentHash": "f08f71e522b76ea3",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 7863,
+      "type": "code"
+    },
+    "frontend/src/components/UpdateNotification.tsx": {
+      "path": "frontend/src/components/UpdateNotification.tsx",
+      "contentHash": "a659a80cd58679e9",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 3210,
+      "type": "code"
+    },
+    "frontend/src/main.tsx": {
+      "path": "frontend/src/main.tsx",
+      "contentHash": "1e8576ffd2bc149a",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 489,
+      "type": "code"
+    },
+    "frontend/src/services/api.ts": {
+      "path": "frontend/src/services/api.ts",
+      "contentHash": "e0068f0eaff967f3",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 6991,
+      "type": "code"
+    },
+    "frontend/src/types/index.ts": {
+      "path": "frontend/src/types/index.ts",
+      "contentHash": "57c18bc35461d154",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 1308,
+      "type": "code"
+    },
+    "frontend/src/utils/errorReporter.ts": {
+      "path": "frontend/src/utils/errorReporter.ts",
+      "contentHash": "e08a7684db69e783",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 5103,
+      "type": "code"
+    },
+    "frontend/src/utils/markdown-export.ts": {
+      "path": "frontend/src/utils/markdown-export.ts",
+      "contentHash": "d8bb9c7f01ac4a1f",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 4035,
+      "type": "code"
+    },
+    "frontend/vite.config.ts": {
+      "path": "frontend/vite.config.ts",
+      "contentHash": "b00424001e79e5ee",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 388,
+      "type": "code"
+    },
+    "src-tauri/build.rs": {
+      "path": "src-tauri/build.rs",
+      "contentHash": "b01bb80b64916f50",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 37,
+      "type": "code"
+    },
+    "src-tauri/src/lib.rs": {
+      "path": "src-tauri/src/lib.rs",
+      "contentHash": "8b5cc31a757e9212",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 2218,
+      "type": "code"
+    },
+    "src-tauri/src/main.rs": {
+      "path": "src-tauri/src/main.rs",
+      "contentHash": "0a49dbe44ba984f2",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 177,
+      "type": "code"
+    },
+    "test_prd_optimizer.py": {
+      "path": "test_prd_optimizer.py",
+      "contentHash": "5d33b618624d1ac1",
+      "lastSyncedAt": "2026-01-05T19:21:27.856Z",
+      "size": 7860,
+      "type": "code"
+    }
+  }
+}

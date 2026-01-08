@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "format": "cv-git-storage",
+  "created": "2026-01-05T19:21:27.861Z",
+  "updated": "2026-01-05T19:21:28.194Z",
+  "repository": {
+    "id": "aa3b715d93cc",
+    "name": "cv-prd",
+    "root": "/home/schmotz/project/cv-prd",
+    "remote": "https://github.com/controlVector/cv-prd.git"
+  },
+  "stats": {
+    "files": 714,
+    "symbols": 10000,
+    "relationships": 16033,
+    "vectors": 376,
+    "lastSync": "2026-01-05T19:21:28.194Z",
+    "syncDuration": 0.334
+  },
+  "embedding": {
+    "provider": "openrouter",
+    "model": "openai/text-embedding-3-small",
+    "dimensions": 1536
+  },
+  "nodeTypes": [
+    "file",
+    "symbol"
+  ],
+  "edgeTypes": [
+    "imports",
+    "calls",
+    "contains"
+  ]
+}
