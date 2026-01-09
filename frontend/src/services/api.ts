@@ -280,3 +280,102 @@ export const getDocumentationCoverage = async (prdId: string) => {
   const response = await api.get(`/prds/${prdId}/documentation-coverage`)
   return response.data
 }
+
+// =============================================================================
+// Async Job Management
+// =============================================================================
+
+export interface JobStatus {
+  id: string
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  current_step: string | null
+  error_message: string | null
+  result_data: Record<string, any> | null
+}
+
+export interface AsyncUploadResponse {
+  job_id: string
+  status: string
+  message: string
+}
+
+/**
+ * Upload a document asynchronously with progress tracking.
+ * Returns immediately with a job_id that can be polled for progress.
+ */
+export const uploadDocumentAsync = async (
+  file: File,
+  name?: string,
+  description?: string
+): Promise<AsyncUploadResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (name) {
+    formData.append('name', name)
+  }
+  if (description) {
+    formData.append('description', description)
+  }
+
+  const response = await api.post<AsyncUploadResponse>('/prds/upload/async', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+  return response.data
+}
+
+/**
+ * Get the status of a background job.
+ * Poll this to track progress of async operations.
+ */
+export const getJobStatus = async (jobId: string): Promise<JobStatus> => {
+  const response = await api.get<JobStatus>(`/jobs/${jobId}`)
+  return response.data
+}
+
+/**
+ * Cancel a pending or running job.
+ */
+export const cancelJob = async (jobId: string): Promise<void> => {
+  await api.post(`/jobs/${jobId}/cancel`)
+}
+
+/**
+ * Poll a job until completion.
+ * Calls onProgress callback with status updates.
+ * Returns the final job status.
+ */
+export const pollJobUntilComplete = async (
+  jobId: string,
+  onProgress?: (status: JobStatus) => void,
+  pollInterval: number = 500
+): Promise<JobStatus> => {
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const status = await getJobStatus(jobId)
+
+        if (onProgress) {
+          onProgress(status)
+        }
+
+        if (status.status === 'completed') {
+          resolve(status)
+        } else if (status.status === 'failed') {
+          reject(new Error(status.error_message || 'Job failed'))
+        } else if (status.status === 'cancelled') {
+          reject(new Error('Job was cancelled'))
+        } else {
+          // Still processing, poll again
+          setTimeout(poll, pollInterval)
+        }
+      } catch (error) {
+        reject(error)
+      }
+    }
+
+    poll()
+  })
+}

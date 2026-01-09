@@ -2,7 +2,7 @@
 API routes for cvPRD application
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
 from fastapi.responses import PlainTextResponse, FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -13,6 +13,7 @@ from app.services.document_parser import DocumentParser, DocumentParserError
 from app.services.export_service import ExportService, ExportFormat, ExportType
 from app.services.test_generation_service import TestGenerationService, TestType, TestFramework
 from app.services.doc_generation_service import DocGenerationService, DocType
+from app.services.job_service import get_job_service, JobProgressTracker
 from app.core.config import settings
 import uuid
 import logging
@@ -20,6 +21,7 @@ import tempfile
 import os
 import shutil
 import zipfile
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -510,6 +512,243 @@ async def upload_prd_document(
     except Exception as e:
         logger.error(f"Error uploading PRD document: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================================
+# Async Upload with Progress Tracking
+# =========================================================================
+
+class AsyncUploadResponse(BaseModel):
+    """Response for async upload - returns job ID for polling"""
+    job_id: str
+    status: str
+    message: str
+
+
+@router.post("/prds/upload/async", response_model=AsyncUploadResponse)
+async def upload_prd_document_async(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+):
+    """
+    Upload a PRD document asynchronously with progress tracking.
+
+    Returns immediately with a job_id that can be polled via /jobs/{job_id}
+    to track progress.
+
+    Accepts .docx, .md, or .markdown files.
+    """
+    try:
+        # Validate file type
+        filename = file.filename or ""
+        allowed_extensions = [".docx", ".md", ".markdown"]
+        file_ext = os.path.splitext(filename)[1].lower()
+
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}. Supported types: {', '.join(allowed_extensions)}",
+            )
+
+        # Read file content before background task (file will be closed after request)
+        content = await file.read()
+
+        # Save to temp file that persists for background task
+        temp_dir = tempfile.mkdtemp(prefix="cvprd_upload_")
+        temp_file_path = os.path.join(temp_dir, filename)
+        with open(temp_file_path, 'wb') as f:
+            f.write(content)
+
+        # Create job
+        job_service = get_job_service()
+        job = job_service.create_job(
+            job_type="prd_upload",
+            input_data={
+                "filename": filename,
+                "temp_path": temp_file_path,
+                "temp_dir": temp_dir,
+                "name": name,
+                "description": description,
+            },
+        )
+
+        # Start background processing
+        async def process_upload():
+            await _process_prd_upload_async(
+                job_id=job.id,
+                temp_file_path=temp_file_path,
+                temp_dir=temp_dir,
+                filename=filename,
+                name=name,
+                description=description,
+            )
+
+        # Schedule the background task
+        asyncio.create_task(process_upload())
+
+        return AsyncUploadResponse(
+            job_id=job.id,
+            status="pending",
+            message=f"Upload queued. Poll /jobs/{job.id} for progress.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error initiating async upload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _process_prd_upload_async(
+    job_id: str,
+    temp_file_path: str,
+    temp_dir: str,
+    filename: str,
+    name: Optional[str],
+    description: Optional[str],
+) -> None:
+    """Background task for processing PRD upload."""
+    job_service = get_job_service()
+
+    try:
+        async with JobProgressTracker(job_service, job_id, total_steps=4) as tracker:
+            # Step 1: Parse document
+            tracker.update(1, "Parsing document...")
+            await asyncio.sleep(0.1)  # Allow UI to update
+
+            prd = DocumentParser.parse_document(
+                temp_file_path,
+                prd_name=name,
+                prd_description=description,
+            )
+
+            # Step 2: Process chunks
+            tracker.update(2, "Processing sections and generating embeddings...")
+            await asyncio.sleep(0.1)
+
+            # Run sync orchestrator in thread pool to not block
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, orchestrator.process_prd, prd)
+
+            # Step 3: Building knowledge graph
+            tracker.update(3, "Building knowledge graph relationships...")
+            await asyncio.sleep(0.1)
+
+            # Step 4: Complete
+            tracker.update(4, "Finalizing...")
+            await asyncio.sleep(0.1)
+
+            # Mark complete with results
+            job_service.complete_job(
+                job_id,
+                result_data={
+                    "prd_id": result["prd_id"],
+                    "prd_name": result["prd_name"],
+                    "chunks_created": result["chunks_created"],
+                    "relationships_created": result["relationships_created"],
+                },
+                prd_id=result["prd_id"],
+            )
+
+            logger.info(f"Async upload completed: {prd.name} with {result['chunks_created']} chunks")
+
+    except Exception as e:
+        logger.error(f"Error in async upload job {job_id}: {e}", exc_info=True)
+        job_service.fail_job(job_id, str(e))
+    finally:
+        # Clean up temp files
+        try:
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+        except Exception as e:
+            logger.warning(f"Failed to clean up temp files: {e}")
+
+
+# =========================================================================
+# Job Status Endpoints
+# =========================================================================
+
+class JobStatusResponse(BaseModel):
+    """Response for job status polling"""
+    id: str
+    status: str
+    progress: int
+    current_step: Optional[str]
+    error_message: Optional[str]
+    result_data: Optional[Dict[str, Any]]
+
+
+class JobListResponse(BaseModel):
+    """Response for listing jobs"""
+    jobs: List[Dict[str, Any]]
+    count: int
+
+
+@router.get("/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    """
+    Get the status of a background job.
+
+    Poll this endpoint to track progress of async operations.
+
+    Status values:
+    - pending: Job is queued
+    - processing: Job is running
+    - completed: Job finished successfully (result_data contains results)
+    - failed: Job failed (error_message contains details)
+    - cancelled: Job was cancelled
+    """
+    job_service = get_job_service()
+    status = job_service.get_job_status(job_id)
+
+    if not status:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JobStatusResponse(**status)
+
+
+@router.get("/jobs")
+async def list_jobs(
+    job_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+):
+    """
+    List background jobs with optional filters.
+
+    Args:
+        job_type: Filter by job type (prd_upload, prd_optimize, etc.)
+        status: Filter by status (pending, processing, completed, failed)
+        limit: Maximum number of jobs to return (default 50)
+    """
+    job_service = get_job_service()
+    jobs = job_service.list_jobs(job_type=job_type, status=status, limit=limit)
+
+    return JobListResponse(
+        jobs=[j.to_dict() for j in jobs],
+        count=len(jobs),
+    )
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """
+    Cancel a pending or running job.
+    """
+    job_service = get_job_service()
+    success = job_service.cancel_job(job_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot cancel job. It may already be completed or not exist.",
+        )
+
+    return {"status": "cancelled", "job_id": job_id}
 
 
 @router.get("/prds/{prd_id}/export/markdown", response_class=PlainTextResponse)

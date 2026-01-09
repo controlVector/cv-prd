@@ -1048,6 +1048,65 @@ button {
   cursor: not-allowed;
 }
 
+/* Upload Progress Bar */
+.upload-progress {
+  background: var(--cv-navy-lighter);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.progress-step {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.progress-percent {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--cv-orange);
+}
+
+.progress-bar-container {
+  height: 8px;
+  background: var(--cv-navy);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--cv-gradient);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.cancel-button {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--cv-navy-lighter);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.cancel-button:hover {
+  background: rgba(255, 107, 107, 0.1);
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+}
+
 /* Scrollbar styling for dark theme */
 ::-webkit-scrollbar {
   width: 10px;

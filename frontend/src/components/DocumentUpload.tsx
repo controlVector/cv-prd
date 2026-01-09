@@ -1,6 +1,6 @@
 import { useState, useRef, DragEvent } from 'react'
 import type { PRDResponse } from '../types'
-import { uploadDocument } from '../services/api'
+import { uploadDocumentAsync, pollJobUntilComplete, cancelJob, type JobStatus } from '../services/api'
 
 export function DocumentUpload() {
   const [file, setFile] = useState<File | null>(null)
@@ -11,6 +11,11 @@ export function DocumentUpload() {
   const [result, setResult] = useState<PRDResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Progress tracking state
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [currentStep, setCurrentStep] = useState<string | null>(null)
 
   const allowedExtensions = ['.docx', '.md', '.markdown']
   // MIME types for validation (currently only extension-based validation is used)
@@ -105,10 +110,35 @@ export function DocumentUpload() {
     setIsLoading(true)
     setError(null)
     setResult(null)
+    setProgress(0)
+    setCurrentStep('Uploading file...')
 
     try {
-      const response = await uploadDocument(file, name || undefined, description || undefined)
-      setResult(response)
+      // Start async upload
+      const uploadResponse = await uploadDocumentAsync(file, name || undefined, description || undefined)
+      setJobId(uploadResponse.job_id)
+      setCurrentStep('Processing...')
+
+      // Poll for progress
+      const finalStatus = await pollJobUntilComplete(
+        uploadResponse.job_id,
+        (status: JobStatus) => {
+          setProgress(status.progress)
+          setCurrentStep(status.current_step)
+        }
+      )
+
+      // Success - extract result from job
+      if (finalStatus.result_data) {
+        setResult({
+          prd_id: finalStatus.result_data.prd_id,
+          prd_name: finalStatus.result_data.prd_name,
+          chunks_created: finalStatus.result_data.chunks_created,
+          relationships_created: finalStatus.result_data.relationships_created,
+          chunks: [], // Chunks are not returned in async response
+        })
+      }
+
       // Reset form
       setFile(null)
       setName('')
@@ -132,6 +162,24 @@ export function DocumentUpload() {
       console.error('Document upload error:', err)
     } finally {
       setIsLoading(false)
+      setJobId(null)
+      setProgress(0)
+      setCurrentStep(null)
+    }
+  }
+
+  const handleCancelUpload = async () => {
+    if (jobId) {
+      try {
+        await cancelJob(jobId)
+        setError('Upload cancelled')
+      } catch (err) {
+        console.error('Failed to cancel job:', err)
+      }
+      setIsLoading(false)
+      setJobId(null)
+      setProgress(0)
+      setCurrentStep(null)
     }
   }
 
@@ -259,13 +307,38 @@ export function DocumentUpload() {
           </small>
         </div>
 
-        <button
-          type="submit"
-          className="submit-button"
-          disabled={isLoading || !file}
-        >
-          {isLoading ? 'Processing...' : 'Upload & Process Document'}
-        </button>
+        {/* Progress Bar */}
+        {isLoading && (
+          <div className="upload-progress">
+            <div className="progress-header">
+              <span className="progress-step">{currentStep || 'Processing...'}</span>
+              <span className="progress-percent">{progress}%</span>
+            </div>
+            <div className="progress-bar-container">
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <button
+              type="button"
+              className="cancel-button"
+              onClick={handleCancelUpload}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {!isLoading && (
+          <button
+            type="submit"
+            className="submit-button"
+            disabled={isLoading || !file}
+          >
+            Upload & Process Document
+          </button>
+        )}
       </form>
     </div>
   )

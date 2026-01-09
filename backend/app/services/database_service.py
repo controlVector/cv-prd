@@ -294,3 +294,26 @@ class DatabaseService:
         """Close database connection"""
         self.engine.dispose()
         logger.info("Database connection closed")
+
+
+# Singleton database service instance
+_db_service: Optional[DatabaseService] = None
+
+
+def get_database_service() -> DatabaseService:
+    """Get the global database service instance."""
+    global _db_service
+    if _db_service is None:
+        _db_service = DatabaseService()
+    return _db_service
+
+
+def get_db_session():
+    """
+    Get a database session as a context manager.
+
+    Usage:
+        with get_db_session() as session:
+            session.query(...)
+    """
+    return get_database_service().get_session()

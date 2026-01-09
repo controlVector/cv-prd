@@ -5,7 +5,7 @@ These models store PRD metadata and content in PostgreSQL for durability,
 while FalkorDB handles the knowledge graph and Qdrant handles vectors.
 """
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum, JSON, Integer, Float
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
 import enum
@@ -31,6 +31,24 @@ class RequestStatusEnum(str, enum.Enum):
     READY = "ready"  # PRD complete, ready for implementation
     IN_PROGRESS = "in_progress"  # Being implemented
     SHIPPED = "shipped"  # Feature delivered
+
+
+class JobStatusEnum(str, enum.Enum):
+    """Async job processing statuses"""
+    PENDING = "pending"  # Queued, waiting to start
+    PROCESSING = "processing"  # Currently running
+    COMPLETED = "completed"  # Finished successfully
+    FAILED = "failed"  # Finished with error
+    CANCELLED = "cancelled"  # Cancelled by user
+
+
+class JobTypeEnum(str, enum.Enum):
+    """Types of async jobs"""
+    PRD_UPLOAD = "prd_upload"  # Document upload and processing
+    PRD_OPTIMIZE = "prd_optimize"  # PRD optimization
+    TEST_GENERATION = "test_generation"  # Generate test cases
+    DOC_GENERATION = "doc_generation"  # Generate documentation
+    EXPORT = "export"  # Export PRD data
 
 
 class RequestTypeEnum(str, enum.Enum):
@@ -301,3 +319,74 @@ class FeatureRequestModel(Base):
             })
 
         return result
+
+
+class JobModel(Base):
+    """
+    Async job tracking for long-running operations.
+
+    Provides progress tracking and status updates for operations like:
+    - PRD document upload and processing
+    - PRD optimization
+    - Test case generation
+    - Documentation generation
+    - Export operations
+    """
+    __tablename__ = "jobs"
+
+    id = Column(String(36), primary_key=True)
+    job_type = Column(String(50), nullable=False, index=True)
+    status = Column(String(20), default="pending", index=True)
+
+    # Progress tracking
+    progress = Column(Integer, default=0)  # 0-100 percentage
+    current_step = Column(String(255), nullable=True)  # Human-readable current step
+    total_steps = Column(Integer, default=0)
+    completed_steps = Column(Integer, default=0)
+
+    # Input/Output
+    input_data = Column(JSON, default=dict)  # Job parameters
+    result_data = Column(JSON, default=dict)  # Job results
+    error_message = Column(Text, nullable=True)  # Error details if failed
+
+    # Resource references
+    prd_id = Column(String(36), ForeignKey("prds.id", ondelete="SET NULL"), nullable=True)
+
+    # Timing
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Metadata
+    created_by = Column(String(36), nullable=True)  # User who triggered the job
+
+    # Relationships
+    prd = relationship("PRDModel")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "job_type": self.job_type,
+            "status": self.status,
+            "progress": self.progress,
+            "current_step": self.current_step,
+            "total_steps": self.total_steps,
+            "completed_steps": self.completed_steps,
+            "result_data": self.result_data or {},
+            "error_message": self.error_message,
+            "prd_id": self.prd_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+    def to_status_response(self):
+        """Minimal status response for polling"""
+        return {
+            "id": self.id,
+            "status": self.status,
+            "progress": self.progress,
+            "current_step": self.current_step,
+            "error_message": self.error_message,
+            "result_data": self.result_data if self.status == "completed" else None,
+        }
