@@ -4,6 +4,8 @@ import { downloadMarkdown, copyMarkdownToClipboard } from '../utils/markdown-exp
 import { MarkdownViewer } from './MarkdownViewer'
 import { TestsPanel } from './TestsPanel'
 import { DocsPanel } from './DocsPanel'
+import { ChangesPanel } from './ChangesPanel'
+import { DesignPanel } from './DesignPanel'
 import './PRDDetail.css'
 
 interface PRDDetailProps {
@@ -11,7 +13,7 @@ interface PRDDetailProps {
   onBack: () => void
 }
 
-type DetailTab = 'requirements' | 'tests' | 'docs'
+type DetailTab = 'requirements' | 'tests' | 'docs' | 'changes' | 'design'
 
 export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
   const [prdData, setPrdData] = useState<any>(null)
@@ -198,6 +200,20 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
             <span className="tab-icon">📖</span>
             Documentation
           </button>
+          <button
+            className={`prd-tab ${activeTab === 'changes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('changes')}
+          >
+            <span className="tab-icon">📜</span>
+            Changes
+          </button>
+          <button
+            className={`prd-tab ${activeTab === 'design' ? 'active' : ''}`}
+            onClick={() => setActiveTab('design')}
+          >
+            <span className="tab-icon">🎨</span>
+            Design
+          </button>
         </div>
 
         {optimizationResult && activeTab === 'requirements' && (
@@ -224,11 +240,11 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
                   {chunks.map((chunk: any, idx: number) => (
                     <div key={chunk.id || idx} className="prd-chunk">
                       <div className="chunk-header">
-                        <span className={`chunk-type chunk-type-${chunk.type.toLowerCase()}`}>
-                          {chunk.type}
+                        <span className={`chunk-type chunk-type-${(chunk.type || 'unknown').toLowerCase()}`}>
+                          {chunk.type || 'Unknown'}
                         </span>
-                        <span className={`chunk-priority chunk-priority-${chunk.priority.toLowerCase()}`}>
-                          {chunk.priority}
+                        <span className={`chunk-priority chunk-priority-${(chunk.priority || 'medium').toLowerCase()}`}>
+                          {chunk.priority || 'Medium'}
                         </span>
                         {chunk.optimized && (
                           <span className="chunk-badge optimized">Optimized</span>
@@ -256,6 +272,18 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
 
         {activeTab === 'docs' && (
           <DocsPanel prdId={prdId} prdName={prdData.name} />
+        )}
+
+        {activeTab === 'changes' && (
+          <ChangesPanel
+            prdId={prdId}
+            prdName={prdData.name}
+            onPRDUpdated={loadPRD}
+          />
+        )}
+
+        {activeTab === 'design' && (
+          <DesignPanel prdId={prdId} prdName={prdData.name} />
         )}
       </div>
     </div>
