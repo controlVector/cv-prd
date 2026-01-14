@@ -175,7 +175,7 @@
 }
 
 .test-item:hover {
-  border-color: rgba(245, 166, 35, 0.3);
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
 .item-header {
@@ -217,7 +217,7 @@
 
 .test-type-badge.all,
 .test-type-badge.functional {
-  background: rgba(245, 166, 35, 0.2);
+  background: rgba(139, 92, 246, 0.2);
   color: var(--cv-orange);
 }
 
