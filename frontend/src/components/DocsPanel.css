@@ -40,12 +40,12 @@
 }
 
 .doc-type-option:hover {
-  border-color: rgba(245, 166, 35, 0.3);
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
 .doc-type-option.active {
   border-color: var(--cv-orange);
-  background: rgba(245, 166, 35, 0.1);
+  background: rgba(139, 92, 246, 0.1);
 }
 
 .doc-type-option:disabled {

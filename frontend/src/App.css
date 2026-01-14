@@ -1,21 +1,21 @@
-/* ControlVector Brand Colors
-   --cv-navy: #1e2a3a (dark background)
-   --cv-orange: #f5a623 (golden orange)
-   --cv-coral: #e85d75 (coral/pink accent)
-   --cv-gradient: linear-gradient(135deg, #f5a623 0%, #e85d75 100%)
+/* Control Fabric Brand Colors
+   --cf-slate: #0f172a (dark background)
+   --cf-violet: #8b5cf6 (primary purple)
+   --cf-cyan: #06b6d4 (cyan accent)
+   --cf-gradient: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)
 */
 
 :root {
-  --cv-navy: #1e2a3a;
-  --cv-navy-light: #2a3a4d;
-  --cv-navy-lighter: #3a4d63;
-  --cv-orange: #f5a623;
-  --cv-coral: #e85d75;
-  --cv-gradient: linear-gradient(135deg, #f5a623 0%, #e85d75 100%);
-  --cv-gradient-hover: linear-gradient(135deg, #e09518 0%, #d44a62 100%);
-  --cv-text-light: #ffffff;
-  --cv-text-muted: rgba(255, 255, 255, 0.7);
-  --cv-amber-glow: rgba(245, 166, 35, 0.15);
+  --cv-navy: #0f172a;
+  --cv-navy-light: #1e293b;
+  --cv-navy-lighter: #334155;
+  --cv-orange: #8b5cf6;
+  --cv-coral: #f43f5e;
+  --cv-gradient: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+  --cv-gradient-hover: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+  --cv-text-light: #f8fafc;
+  --cv-text-muted: rgba(248, 250, 252, 0.7);
+  --cv-amber-glow: rgba(139, 92, 246, 0.15);
 }
 
 * {
@@ -79,7 +79,7 @@ body {
 .settings-button:hover {
   border-color: var(--cv-orange);
   color: var(--cv-orange);
-  background: rgba(245, 166, 35, 0.1);
+  background: rgba(139, 92, 246, 0.1);
 }
 
 .app-header-content h1 {
@@ -232,7 +232,7 @@ button {
 .btn-primary:hover:not(:disabled) {
   background: var(--cv-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .btn-primary:disabled {
@@ -270,7 +270,7 @@ button {
 }
 
 .btn-remove:hover {
-  background: #d44a62;
+  background: #e11d48;
 }
 
 .form-actions {
@@ -279,7 +279,7 @@ button {
 
 /* Messages */
 .error-message {
-  background: rgba(232, 93, 117, 0.1);
+  background: rgba(168, 85, 247, 0.1);
   border: 2px solid var(--cv-coral);
   color: #ff8a9d;
   padding: 1rem;
@@ -499,7 +499,7 @@ button {
 
 .prd-card:hover {
   border-color: var(--cv-orange);
-  box-shadow: 0 8px 30px rgba(245, 166, 35, 0.2);
+  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.2);
   transform: translateY(-3px);
 }
 
@@ -544,13 +544,13 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  background: linear-gradient(135deg, rgba(245, 166, 35, 0.15), rgba(232, 93, 117, 0.1));
-  border-top: 1px solid rgba(245, 166, 35, 0.2);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.1));
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
   transition: all 0.2s;
 }
 
 .prd-card:hover .prd-card-cta {
-  background: linear-gradient(135deg, rgba(245, 166, 35, 0.25), rgba(232, 93, 117, 0.15));
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(168, 85, 247, 0.15));
 }
 
 .cta-text {
@@ -595,13 +595,13 @@ button {
 }
 
 .prd-quick-actions .btn-optimize {
-  background: rgba(245, 166, 35, 0.1);
-  border-color: rgba(245, 166, 35, 0.3);
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
   color: var(--cv-orange);
 }
 
 .prd-quick-actions .btn-optimize:hover {
-  background: rgba(245, 166, 35, 0.2);
+  background: rgba(139, 92, 246, 0.2);
 }
 
 .loading {
@@ -812,12 +812,12 @@ button {
 }
 
 .chunk-priority-critical {
-  background: rgba(232, 93, 117, 0.2);
+  background: rgba(168, 85, 247, 0.2);
   color: #ff8a9d;
 }
 
 .chunk-priority-high {
-  background: rgba(245, 166, 35, 0.2);
+  background: rgba(139, 92, 246, 0.2);
   color: var(--cv-orange);
 }
 
@@ -896,12 +896,12 @@ button {
 
 .drop-zone:hover {
   border-color: var(--cv-orange);
-  background: rgba(245, 166, 35, 0.05);
+  background: rgba(139, 92, 246, 0.05);
 }
 
 .drop-zone.dragging {
   border-color: var(--cv-orange);
-  background: rgba(245, 166, 35, 0.1);
+  background: rgba(139, 92, 246, 0.1);
   border-style: solid;
 }
 
@@ -950,7 +950,7 @@ button {
 .browse-button:hover {
   background: var(--cv-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .file-preview {
@@ -998,7 +998,7 @@ button {
 }
 
 .remove-file-button:hover {
-  background: #d44a62;
+  background: #e11d48;
 }
 
 .field-hint {
@@ -1039,7 +1039,7 @@ button {
 .submit-button:hover:not(:disabled) {
   background: var(--cv-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .submit-button:disabled {
@@ -1127,7 +1127,7 @@ button {
 
 /* Selection color */
 ::selection {
-  background: rgba(245, 166, 35, 0.3);
+  background: rgba(139, 92, 246, 0.3);
   color: white;
 }
 
@@ -1220,7 +1220,7 @@ button {
 .format-option.selected,
 .type-option.selected {
   border-color: var(--cv-orange);
-  background: rgba(245, 166, 35, 0.1);
+  background: rgba(139, 92, 246, 0.1);
 }
 
 .format-option.disabled {
@@ -1293,7 +1293,7 @@ button {
 
 /* Export Hint */
 .export-hint {
-  background: rgba(245, 166, 35, 0.1);
+  background: rgba(139, 92, 246, 0.1);
   border: 1px solid var(--cv-orange);
   border-radius: 8px;
   padding: 1rem;
@@ -1393,7 +1393,7 @@ button {
 }
 
 .update-error {
-  background: rgba(232, 93, 117, 0.2);
+  background: rgba(168, 85, 247, 0.2);
   color: var(--cv-coral);
   padding: 0.5rem 1rem;
   border-radius: 4px;
@@ -1442,7 +1442,7 @@ button {
 .update-btn-install:hover {
   background: var(--cv-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .update-btn-dismiss {

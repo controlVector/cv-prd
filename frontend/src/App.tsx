@@ -21,9 +21,9 @@ function App() {
       <UpdateNotification />
       <ApiKeyWarning onOpenSettings={() => setShowSettings(true)} />
       <header className="app-header">
-        <img src="/cvlogo.png" alt="ControlVector" className="app-logo" />
+        <img src="/cflogo.png" alt="Control Fabric" className="app-logo" />
         <div className="app-header-content">
-          <h1>cvPRD</h1>
+          <h1>Control Fabric PRD</h1>
           <p>AI-Powered Product Requirements Documentation</p>
         </div>
         <button

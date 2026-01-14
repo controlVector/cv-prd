@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CV-PRD",
+  "productName": "Control-Fabric-PRD",
   "version": "0.1.13",
-  "identifier": "com.controlvector.cv-prd",
+  "identifier": "io.controlfabric.prd",
   "plugins": {
     "updater": {
       "endpoints": [
@@ -20,7 +20,7 @@
   "app": {
     "windows": [
       {
-        "title": "CV-PRD - Product Requirements Manager",
+        "title": "Control Fabric PRD - Product Requirements Manager",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -48,8 +48,8 @@
       "binaries/cvprd-backend"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "AI-powered product requirements document manager",
-    "longDescription": "CV-PRD helps you manage product requirements documents with AI-powered search, graph visualization, and semantic understanding.",
+    "shortDescription": "Control Fabric AI-powered product requirements manager",
+    "longDescription": "Control Fabric PRD helps you manage product requirements documents with AI-powered search, graph visualization, and semantic understanding.",
     "linux": {
       "deb": {
         "depends": []
