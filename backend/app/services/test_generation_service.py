@@ -45,7 +45,7 @@ class TestGenerationService:
     def __init__(
         self,
         openrouter: OpenRouterService,
-        graph_service: GraphService,
+        graph_service: Optional[GraphService] = None,
         embedding_service: Optional[EmbeddingService] = None,
         vector_service: Optional[VectorService] = None,
     ):
@@ -53,7 +53,7 @@ class TestGenerationService:
         self.graph = graph_service
         self.embedding = embedding_service
         self.vector = vector_service
-        logger.info("TestGenerationService initialized")
+        logger.info("TestGenerationService initialized (graph=%s)", "enabled" if graph_service and getattr(graph_service, 'available', True) else "disabled")
 
     async def generate_test_cases(
         self,
@@ -159,8 +159,14 @@ class TestGenerationService:
             except Exception as e:
                 logger.error(f"Failed to generate tests for chunk {chunk.get('id')}: {e}")
 
-        # Calculate coverage
-        coverage = self.graph.get_test_coverage(prd_id)
+        # Calculate coverage if graph is available
+        coverage = None
+        graph_available = self.graph and getattr(self.graph, 'available', True)
+        if graph_available:
+            try:
+                coverage = self.graph.get_test_coverage(prd_id)
+            except Exception as e:
+                logger.warning(f"Could not calculate test coverage: {e}")
 
         return {
             "prd_id": prd_id,
@@ -204,43 +210,52 @@ class TestGenerationService:
         include_code_stub: bool,
     ) -> str:
         """Build the system prompt for test generation."""
-        framework_str = framework.value if framework else "appropriate"
 
-        prompt = f"""You are an expert software test engineer. Your task is to generate comprehensive test cases from software requirements.
+        prompt = f"""You are an expert software test engineer. Your task is to generate comprehensive, LANGUAGE-AGNOSTIC test specifications from software requirements.
 
-Generate test cases that are:
-- Specific and measurable
+Generate test specifications that are:
+- Specific, measurable, and technology-neutral
 - Covering both positive and negative scenarios
 - Including edge cases and boundary conditions
 - Traceable back to the requirement
+- Written so they can be implemented in ANY programming language
 
 Test types to generate: {test_type.value}
-"""
 
-        if include_code_stub:
-            prompt += f"""
-Also generate code stubs in {framework_str} format that can be used as a starting point for implementation.
-"""
+For each test case, also recommend the most suitable programming language/framework based on:
+- The nature of the requirement (web, API, mobile, embedded, etc.)
+- Common industry practices for similar testing needs
+- Ease of implementation and maintenance
 
-        prompt += """
 IMPORTANT: Return ONLY valid JSON, no markdown code blocks.
 Generate exactly 2-3 test cases maximum.
-Keep descriptions brief (1-2 sentences).
+Keep descriptions brief but complete.
 
 Your response MUST be this exact JSON structure:
-{
+{{
+  "recommended_stack": {{
+    "language": "python",
+    "framework": "pytest",
+    "reasoning": "Brief reason why this stack is recommended"
+  }},
   "test_cases": [
-    {
+    {{
       "test_id": "TC001",
       "test_type": "unit",
       "title": "Brief test title",
-      "description": "One sentence description",
+      "description": "What this test verifies",
+      "preconditions": ["System state required before test"],
+      "steps": ["Step 1: Do X", "Step 2: Verify Y"],
       "expected_result": "Expected outcome",
-      "priority": "high",
-      "code_stub": "def test_example(): pass"
-    }
+      "priority": "high"
+    }}
   ]
-}
+}}
+"""
+        # Only add code stub guidance if explicitly requested with a framework
+        if include_code_stub and framework and framework != TestFramework.UNKNOWN:
+            prompt += f"""
+Additionally, since {framework.value} was explicitly requested, include a "code_stub" field with example code for each test case.
 """
         return prompt
 
@@ -430,6 +445,9 @@ Your response MUST be this exact JSON structure:
                 logger.error(f"Response preview: {original_text[:1000]}")
                 return []
 
+            # Extract recommended stack if present
+            recommended_stack = parsed.get("recommended_stack", {})
+
             # Convert to our format
             test_cases = []
             for tc in parsed.get("test_cases", []):
@@ -446,6 +464,10 @@ Your response MUST be this exact JSON structure:
                     "priority": tc.get("priority", "medium"),
                     "code_stub": tc.get("code_stub", ""),
                     "chunk_type": self._map_test_type_to_chunk_type(tc.get("test_type", "unit")),
+                    # Add recommended stack to each test case for display
+                    "recommended_language": recommended_stack.get("language"),
+                    "recommended_framework": recommended_stack.get("framework"),
+                    "stack_reasoning": recommended_stack.get("reasoning"),
                 }
                 test_cases.append(test_case)
 
@@ -471,8 +493,9 @@ Your response MUST be this exact JSON structure:
         test_case: Dict[str, Any],
         requirement_chunk: Dict[str, Any],
     ) -> None:
-        """Store a test case in the graph and optionally vector store."""
+        """Store a test case in the graph (if available) and optionally vector store."""
         chunk_id = test_case["id"]
+        requirement_id = requirement_chunk.get("id")
 
         # Build text representation for storage
         text = f"""# {test_case['title']}
@@ -489,6 +512,15 @@ Your response MUST be this exact JSON structure:
 {test_case['expected_result']}
 """
 
+        # Add recommended stack info if present
+        if test_case.get('recommended_language'):
+            text += f"""
+## Recommended Implementation
+- **Language:** {test_case.get('recommended_language')}
+- **Framework:** {test_case.get('recommended_framework', 'N/A')}
+- **Reasoning:** {test_case.get('stack_reasoning', 'N/A')}
+"""
+
         if test_case.get('code_stub'):
             text += f"""
 ## Code Stub
@@ -497,35 +529,41 @@ Your response MUST be this exact JSON structure:
 ```
 """
 
-        # Create graph node
-        self.graph.create_chunk_node(chunk_id, {
-            "type": test_case["chunk_type"],
-            "text": text,
-            "priority": test_case["priority"],
-            "context": f"Test for: {requirement_chunk.get('text', '')[:100]}",
-        })
+        # Store in graph only if available
+        graph_available = self.graph and getattr(self.graph, 'available', True)
+        if graph_available:
+            try:
+                self.graph.create_chunk_node(chunk_id, {
+                    "type": test_case["chunk_type"],
+                    "text": text,
+                    "priority": test_case["priority"],
+                    "context": f"Test for: {requirement_chunk.get('text', '')[:100]}",
+                })
 
-        # Link to PRD
-        if test_case.get("prd_id"):
-            self.graph.link_chunk_to_prd(chunk_id, test_case["prd_id"])
+                # Link to PRD
+                if test_case.get("prd_id"):
+                    self.graph.link_chunk_to_prd(chunk_id, test_case["prd_id"])
 
-        # Create TESTS relationship
-        requirement_id = requirement_chunk.get("id")
-        if requirement_id:
-            self.graph.create_tests_relationship(
-                test_chunk_id=chunk_id,
-                requirement_chunk_id=requirement_id,
-                properties={
-                    "test_type": test_case["test_type"],
-                    "generated": True,
-                }
-            )
+                # Create TESTS relationship
+                if requirement_id:
+                    self.graph.create_tests_relationship(
+                        test_chunk_id=chunk_id,
+                        requirement_chunk_id=requirement_id,
+                        properties={
+                            "test_type": test_case["test_type"],
+                            "generated": True,
+                        }
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to store test case in graph: {e}")
+        else:
+            logger.debug("Graph service not available, skipping graph storage")
 
         # Optionally embed and index in vector store
         if self.embedding and self.vector:
             try:
-                embedding = await self.embedding.embed_text(text)
-                await self.vector.index_chunk(
+                embedding = self.embedding.embed_text(text)
+                self.vector.index_chunk(
                     chunk_id=chunk_id,
                     vector=embedding,
                     payload={
