@@ -21,12 +21,16 @@ class PRDOrchestrator:
     def __init__(self):
         self.embedding_service = EmbeddingService(model_name=settings.EMBEDDING_MODEL)
 
+        # Get dimension from embedding service (auto-detected or from known models)
+        embedding_dim = self.embedding_service.get_dimension()
+        logger.info(f"Using embedding dimension: {embedding_dim}")
+
         # Initialize Qdrant - uses local mode if QDRANT_LOCAL_PATH is set or in DESKTOP_MODE
         self.vector_service = VectorService(
             host=settings.QDRANT_HOST,
             port=settings.QDRANT_PORT,
             collection_name=settings.QDRANT_COLLECTION,
-            vector_size=settings.EMBEDDING_DIMENSION,
+            vector_size=embedding_dim,
             local_path=settings.QDRANT_LOCAL_PATH,
         )
 
