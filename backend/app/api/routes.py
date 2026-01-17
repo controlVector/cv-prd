@@ -51,6 +51,7 @@ test_generation_service = TestGenerationService(
     graph_service=orchestrator.graph_service,
     embedding_service=orchestrator.embedding_service,
     vector_service=orchestrator.vector_service,
+    database_service=orchestrator.db_service,
 )
 
 # Initialize doc generation service

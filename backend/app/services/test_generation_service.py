@@ -15,6 +15,7 @@ from app.services.openrouter_service import OpenRouterService
 from app.services.graph_service import GraphService
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_service import VectorService
+from app.services.database_service import DatabaseService
 from app.models.prd_models import ChunkType, Priority
 
 logger = logging.getLogger(__name__)
@@ -48,12 +49,16 @@ class TestGenerationService:
         graph_service: Optional[GraphService] = None,
         embedding_service: Optional[EmbeddingService] = None,
         vector_service: Optional[VectorService] = None,
+        database_service: Optional[DatabaseService] = None,
     ):
         self.openrouter = openrouter
         self.graph = graph_service
         self.embedding = embedding_service
         self.vector = vector_service
-        logger.info("TestGenerationService initialized (graph=%s)", "enabled" if graph_service and getattr(graph_service, 'available', True) else "disabled")
+        self.db = database_service
+        logger.info("TestGenerationService initialized (graph=%s, db=%s)",
+                    "enabled" if graph_service and getattr(graph_service, 'available', True) else "disabled",
+                    "enabled" if database_service else "disabled")
 
     async def generate_test_cases(
         self,
@@ -529,7 +534,30 @@ Additionally, since {framework.value} was explicitly requested, include a "code_
 ```
 """
 
-        # Store in graph only if available
+        # Store in database (primary storage for persistence)
+        if self.db:
+            try:
+                self.db.create_chunk(
+                    chunk_id=chunk_id,
+                    prd_id=test_case.get("prd_id"),
+                    chunk_type=test_case["chunk_type"],
+                    text=text,
+                    context_prefix=f"Test for: {requirement_chunk.get('text', '')[:100]}",
+                    priority=test_case["priority"],
+                    tags=[test_case["test_type"], "generated"],
+                    metadata={
+                        "source_requirement_id": requirement_id,
+                        "test_type": test_case["test_type"],
+                        "title": test_case.get("title"),
+                        "recommended_language": test_case.get("recommended_language"),
+                        "recommended_framework": test_case.get("recommended_framework"),
+                    },
+                )
+                logger.debug(f"Stored test case {chunk_id} in database")
+            except Exception as e:
+                logger.warning(f"Failed to store test case in database: {e}")
+
+        # Store in graph if available
         graph_available = self.graph and getattr(self.graph, 'available', True)
         if graph_available:
             try:
