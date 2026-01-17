@@ -165,15 +165,18 @@ class ChunkModel(Base):
     prd = relationship("PRDModel", back_populates="chunks")
 
     def to_dict(self):
+        metadata = self.chunk_metadata or {}
         return {
             "id": self.id,
             "prd_id": self.prd_id,
             "chunk_type": self.chunk_type,
+            "type": self.chunk_type,  # Alias for frontend compatibility
             "text": self.text,
             "context_prefix": self.context_prefix,
             "priority": self.priority,
             "tags": self.tags or [],
-            "metadata": self.chunk_metadata or {},
+            "metadata": metadata,
+            "section_title": metadata.get("section_title"),  # Expose for grouping
         }
 
 
