@@ -2022,13 +2022,58 @@ async def get_tests_for_prd(prd_id: str):
 async def get_test_coverage(prd_id: str):
     """
     Get test coverage metrics for a PRD.
+    Works with or without graph service - falls back to database counts.
     """
     try:
-        if not orchestrator.graph_service:
-            raise HTTPException(status_code=503, detail="Graph service not available")
+        # Try graph service first if available
+        graph_available = orchestrator.graph_service and getattr(orchestrator.graph_service, 'available', True)
+        if graph_available:
+            try:
+                coverage = orchestrator.graph_service.get_test_coverage(prd_id)
+                return coverage
+            except Exception as e:
+                logger.warning(f"Graph coverage failed, falling back to DB: {e}")
 
-        coverage = orchestrator.graph_service.get_test_coverage(prd_id)
-        return coverage
+        # Fallback: Calculate coverage from database
+        if orchestrator.db_service:
+            chunks = orchestrator.db_service.get_chunks_for_prd(prd_id)
+
+            # Count requirements (testable chunks)
+            testable_types = ['requirement', 'feature', 'constraint']
+            requirements = [c for c in chunks if c.chunk_type in testable_types]
+
+            # Count test cases
+            test_types = ['test_case', 'unit_test_spec', 'integration_test_spec', 'acceptance_criteria']
+            tests = [c for c in chunks if c.chunk_type in test_types]
+
+            # For now, assume each test covers one requirement (simplified)
+            total_requirements = len(requirements)
+            total_tests = len(tests)
+
+            # Estimate covered requirements from test metadata
+            covered_ids = set()
+            for t in tests:
+                metadata = t.chunk_metadata or {}
+                if metadata.get('source_requirement_id'):
+                    covered_ids.add(metadata['source_requirement_id'])
+
+            covered_requirements = len(covered_ids) if covered_ids else min(total_tests, total_requirements)
+            coverage_percent = round((covered_requirements / total_requirements * 100) if total_requirements > 0 else 0)
+
+            return {
+                "total_requirements": total_requirements,
+                "covered_requirements": covered_requirements,
+                "total_tests": total_tests,
+                "coverage_percent": coverage_percent,
+            }
+
+        # No data source available
+        return {
+            "total_requirements": 0,
+            "covered_requirements": 0,
+            "total_tests": 0,
+            "coverage_percent": 0,
+        }
 
     except Exception as e:
         logger.error(f"Error getting test coverage: {e}")
