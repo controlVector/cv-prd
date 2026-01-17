@@ -27,24 +27,46 @@ def is_bundled() -> bool:
 def setup_desktop_mode():
     """Configure environment for desktop/bundled mode."""
     # Enable desktop mode - uses embedded services (local Qdrant, SQLite)
-    os.environ.setdefault('DESKTOP_MODE', 'true')
+    os.environ['DESKTOP_MODE'] = 'true'
 
     # Bind to localhost only for security
     os.environ.setdefault('HOST', '127.0.0.1')
 
+    # Use SQLite instead of PostgreSQL (override .env file)
+    data_dir = _get_desktop_data_dir()
+    os.environ['DATABASE_URL'] = f"sqlite:///{os.path.join(data_dir, 'cvprd.db')}"
+
+    # Use local Qdrant storage
+    os.environ['QDRANT_LOCAL_PATH'] = os.path.join(data_dir, 'qdrant')
+
     # Disable services that require external servers on Windows
     if os.name == 'nt':
         # FalkorDB doesn't support Windows natively
-        os.environ.setdefault('FALKORDB_ENABLED', 'false')
+        os.environ['FALKORDB_ENABLED'] = 'false'
 
     print("Desktop mode enabled - using embedded services")
+    print(f"Data directory: {data_dir}")
+
+
+def _get_desktop_data_dir() -> str:
+    """Get the application data directory for desktop mode."""
+    if os.name == 'nt':  # Windows
+        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        data_dir = os.path.join(base, 'cvprd', 'data')
+    elif hasattr(os, 'uname') and os.uname().sysname == 'Darwin':  # macOS
+        data_dir = os.path.expanduser('~/Library/Application Support/cvprd/data')
+    else:  # Linux
+        data_dir = os.path.expanduser('~/.local/share/cvprd/data')
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
 
 
 # Add the app directory to the path for development
 sys.path.insert(0, str(Path(__file__).parent))
 
 # Detect bundled mode and configure accordingly
-if is_bundled():
+# IMPORTANT: Must set env vars BEFORE importing app modules
+if is_bundled() or os.environ.get('DESKTOP_MODE', '').lower() == 'true':
     setup_desktop_mode()
 
 # Explicitly import ALL app modules so PyInstaller includes them
