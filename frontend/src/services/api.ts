@@ -152,11 +152,21 @@ export interface GenerateTestsRequest {
 
 export interface TestCase {
   id: string
-  name: string
+  name?: string
+  title?: string
   description: string
   test_type: string
+  priority?: string
+  preconditions?: string[]
+  steps?: string[]
+  expected_result?: string
   code_stub?: string
-  requirement_chunk_id: string
+  requirement_chunk_id?: string
+  source_requirement_id?: string
+  // AI-recommended stack
+  recommended_language?: string
+  recommended_framework?: string
+  stack_reasoning?: string
 }
 
 export interface GenerateTestsResponse {

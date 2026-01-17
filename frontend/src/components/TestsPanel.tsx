@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   generateTestSuite,
   getTestCoverage,
@@ -12,14 +12,25 @@ interface TestsPanelProps {
   prdName: string
 }
 
+// Progress messages to show during generation
+const PROGRESS_MESSAGES = [
+  'Analyzing PRD requirements...',
+  'Identifying testable scenarios...',
+  'Generating test specifications...',
+  'Creating test cases for each requirement...',
+  'Determining recommended tech stack...',
+  'Finalizing test suite...',
+]
+
 export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
-  const [testFramework, setTestFramework] = useState('pytest')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generationStatus, setGenerationStatus] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [tests, setTests] = useState<TestCase[]>([])
   const [testCoverage, setTestCoverage] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedTest, setExpandedTest] = useState<string | null>(null)
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Load existing tests on mount
   useEffect(() => {
@@ -43,11 +54,31 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
     loadTests()
   }, [prdId])
 
+  const startProgressMessages = () => {
+    let index = 0
+    setGenerationStatus(PROGRESS_MESSAGES[0])
+    progressIntervalRef.current = setInterval(() => {
+      index = (index + 1) % PROGRESS_MESSAGES.length
+      setGenerationStatus(PROGRESS_MESSAGES[index])
+    }, 3000) // Cycle through messages every 3 seconds
+  }
+
+  const stopProgressMessages = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
+    setGenerationStatus('')
+  }
+
   const handleGenerate = async () => {
     setIsGenerating(true)
     setError(null)
+    startProgressMessages()
+
     try {
-      const result = await generateTestSuite(prdId, testFramework)
+      // No framework parameter - tests are now language-agnostic with AI recommendations
+      const result = await generateTestSuite(prdId)
       // Merge new tests with existing - generated tests are returned and also stored
       const newTests = result.test_cases || []
       setTests(prev => {
@@ -71,6 +102,7 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
         setError(detail || 'Failed to generate tests')
       }
     } finally {
+      stopProgressMessages()
       setIsGenerating(false)
     }
   }
@@ -79,18 +111,43 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
     navigator.clipboard.writeText(text)
   }
 
-  const downloadAsFile = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: 'text/plain' })
+  const downloadAsMarkdown = () => {
+    const content = tests.map(t => {
+      let md = `## ${t.name}\n\n`
+      md += `**Type:** ${t.test_type}\n`
+      md += `**Priority:** ${t.priority || 'medium'}\n\n`
+      md += `### Description\n${t.description}\n\n`
+      if (t.preconditions?.length) {
+        md += `### Preconditions\n${t.preconditions.map(p => `- ${p}`).join('\n')}\n\n`
+      }
+      if (t.steps?.length) {
+        md += `### Steps\n${t.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\n`
+      }
+      if (t.expected_result) {
+        md += `### Expected Result\n${t.expected_result}\n\n`
+      }
+      if (t.recommended_language) {
+        md += `### Recommended Stack\n`
+        md += `- **Language:** ${t.recommended_language}\n`
+        md += `- **Framework:** ${t.recommended_framework || 'N/A'}\n`
+        if (t.stack_reasoning) {
+          md += `- **Reasoning:** ${t.stack_reasoning}\n`
+        }
+        md += '\n'
+      }
+      if (t.code_stub) {
+        md += `### Code Stub\n\`\`\`\n${t.code_stub}\n\`\`\`\n`
+      }
+      return md
+    }).join('\n---\n\n')
+
+    const blob = new Blob([`# Test Suite: ${prdName}\n\n${content}`], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = filename
+    a.download = `${prdName.toLowerCase().replace(/\s+/g, '_')}_tests.md`
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  const getFileExtension = () => {
-    return testFramework === 'pytest' ? 'py' : 'js'
   }
 
   return (
@@ -98,25 +155,12 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
       <div className="panel-intro">
         <h2>Generate Test Cases</h2>
         <p>
-          AI will analyze your PRD requirements and generate test specifications
-          with code stubs for your chosen framework.
+          AI will analyze your PRD requirements and generate language-agnostic test
+          specifications with recommended implementation stack.
         </p>
       </div>
 
       <div className="generation-controls">
-        <div className="control-group">
-          <label>Test Framework</label>
-          <select
-            value={testFramework}
-            onChange={(e) => setTestFramework(e.target.value)}
-            disabled={isGenerating}
-          >
-            <option value="pytest">pytest (Python)</option>
-            <option value="jest">Jest (JavaScript)</option>
-            <option value="vitest">Vitest (JavaScript)</option>
-            <option value="mocha">Mocha (JavaScript)</option>
-          </select>
-        </div>
         <button
           className="btn-primary generate-btn"
           onClick={handleGenerate}
@@ -125,13 +169,25 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
           {isGenerating ? (
             <>
               <span className="spinner"></span>
-              Generating Tests...
+              Generating...
             </>
           ) : (
             'Generate Test Suite'
           )}
         </button>
       </div>
+
+      {isGenerating && generationStatus && (
+        <div className="generation-progress">
+          <div className="progress-indicator">
+            <span className="progress-dot"></span>
+            <span className="progress-dot"></span>
+            <span className="progress-dot"></span>
+          </div>
+          <p className="progress-status">{generationStatus}</p>
+          <p className="progress-hint">This may take a minute depending on the number of requirements.</p>
+        </div>
+      )}
 
       {error && (
         <div className="error-message">
@@ -176,16 +232,27 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
             <h3>Test Cases ({tests.length})</h3>
             <button
               className="btn-secondary btn-sm"
-              onClick={() => {
-                const allCode = tests
-                  .map(t => `# ${t.name}\n# ${t.description}\n\n${t.code_stub || '# No code stub'}`)
-                  .join('\n\n' + '='.repeat(60) + '\n\n')
-                downloadAsFile(allCode, `${prdName.toLowerCase().replace(/\s+/g, '_')}_tests.${getFileExtension()}`)
-              }}
+              onClick={downloadAsMarkdown}
             >
-              Download All
+              Export as Markdown
             </button>
           </div>
+
+          {/* Show recommended stack if available (from first test) */}
+          {tests[0]?.recommended_language && (
+            <div className="recommended-stack">
+              <h4>Recommended Implementation Stack</h4>
+              <div className="stack-info">
+                <span className="stack-badge language">{tests[0].recommended_language}</span>
+                {tests[0].recommended_framework && (
+                  <span className="stack-badge framework">{tests[0].recommended_framework}</span>
+                )}
+              </div>
+              {tests[0].stack_reasoning && (
+                <p className="stack-reasoning">{tests[0].stack_reasoning}</p>
+              )}
+            </div>
+          )}
 
           {tests.map((test) => (
             <div key={test.id} className="test-item">
@@ -197,28 +264,57 @@ export function TestsPanel({ prdId, prdName }: TestsPanelProps) {
                   <span className={`test-type-badge ${test.test_type}`}>
                     {test.test_type}
                   </span>
-                  <span className="item-name">{test.name}</span>
+                  <span className="item-name">{test.name || test.title}</span>
                 </div>
                 <span className="expand-icon">{expandedTest === test.id ? '▼' : '▶'}</span>
               </div>
 
               <p className="item-description">{test.description}</p>
 
-              {expandedTest === test.id && test.code_stub && (
-                <div className="code-block">
-                  <div className="code-header">
-                    <span>Code Stub ({testFramework})</span>
-                    <button
-                      className="btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        copyToClipboard(test.code_stub!)
-                      }}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                  <pre><code>{test.code_stub}</code></pre>
+              {expandedTest === test.id && (
+                <div className="test-details">
+                  {test.preconditions && test.preconditions.length > 0 && (
+                    <div className="detail-section">
+                      <h5>Preconditions</h5>
+                      <ul>
+                        {test.preconditions.map((p, i) => <li key={i}>{p}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {test.steps && test.steps.length > 0 && (
+                    <div className="detail-section">
+                      <h5>Steps</h5>
+                      <ol>
+                        {test.steps.map((s, i) => <li key={i}>{s}</li>)}
+                      </ol>
+                    </div>
+                  )}
+
+                  {test.expected_result && (
+                    <div className="detail-section">
+                      <h5>Expected Result</h5>
+                      <p>{test.expected_result}</p>
+                    </div>
+                  )}
+
+                  {test.code_stub && (
+                    <div className="code-block">
+                      <div className="code-header">
+                        <span>Code Stub</span>
+                        <button
+                          className="btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            copyToClipboard(test.code_stub!)
+                          }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>{test.code_stub}</code></pre>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
