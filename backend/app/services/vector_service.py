@@ -72,21 +72,36 @@ class VectorService:
         self.is_local = False
 
     def _ensure_collection(self):
-        """Create collection if it doesn't exist"""
+        """Create collection if it doesn't exist or has wrong dimensions"""
         collections = self.client.get_collections().collections
         collection_names = [c.name for c in collections]
 
-        if self.collection_name not in collection_names:
-            logger.info(f"Creating collection: {self.collection_name}")
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=VectorParams(
-                    size=self.vector_size, distance=Distance.COSINE
-                ),
-            )
-            logger.info("Collection created successfully")
-        else:
-            logger.info(f"Collection {self.collection_name} already exists")
+        if self.collection_name in collection_names:
+            # Check if existing collection has correct dimensions
+            try:
+                collection_info = self.client.get_collection(self.collection_name)
+                existing_size = collection_info.config.params.vectors.size
+                if existing_size != self.vector_size:
+                    logger.warning(
+                        f"Collection {self.collection_name} has wrong dimensions "
+                        f"({existing_size} vs {self.vector_size}). Recreating..."
+                    )
+                    self.client.delete_collection(self.collection_name)
+                else:
+                    logger.info(f"Collection {self.collection_name} already exists with correct dimensions")
+                    return
+            except Exception as e:
+                logger.warning(f"Could not verify collection dimensions: {e}")
+                return
+
+        logger.info(f"Creating collection: {self.collection_name} with {self.vector_size} dimensions")
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            vectors_config=VectorParams(
+                size=self.vector_size, distance=Distance.COSINE
+            ),
+        )
+        logger.info("Collection created successfully")
 
     def index_chunk(
         self, chunk_id: str, vector: List[float], payload: Dict[str, Any]
