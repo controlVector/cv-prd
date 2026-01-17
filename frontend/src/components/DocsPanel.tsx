@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   generateUserManual,
   generateApiDocs,
@@ -30,17 +30,63 @@ const DOC_TYPE_LABELS: Record<DocType, { label: string; description: string }> =
   }
 }
 
+const PROGRESS_MESSAGES: Record<DocType, string[]> = {
+  user_manual: [
+    'Analyzing requirements for user perspective...',
+    'Identifying user workflows and tasks...',
+    'Writing step-by-step instructions...',
+    'Organizing content by user goals...',
+    'Finalizing user manual...',
+  ],
+  api_docs: [
+    'Extracting API endpoints from requirements...',
+    'Documenting request/response formats...',
+    'Writing parameter descriptions...',
+    'Adding code examples...',
+    'Finalizing API documentation...',
+  ],
+  technical_spec: [
+    'Analyzing technical requirements...',
+    'Designing architecture overview...',
+    'Documenting component interactions...',
+    'Specifying data models...',
+    'Finalizing technical specification...',
+  ],
+}
+
 export function DocsPanel({ prdId, prdName }: DocsPanelProps) {
   const [docType, setDocType] = useState<DocType>('user_manual')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generationStatus, setGenerationStatus] = useState('')
   const [generatedDocs, setGeneratedDocs] = useState<DocSection[]>([])
   const [docCoverage, setDocCoverage] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [generatedType, setGeneratedType] = useState<DocType | null>(null)
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const startProgressMessages = (type: DocType) => {
+    const messages = PROGRESS_MESSAGES[type]
+    let index = 0
+    setGenerationStatus(messages[0])
+    progressIntervalRef.current = setInterval(() => {
+      index = (index + 1) % messages.length
+      setGenerationStatus(messages[index])
+    }, 3000)
+  }
+
+  const stopProgressMessages = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
+    setGenerationStatus('')
+  }
 
   const handleGenerate = async () => {
     setIsGenerating(true)
     setError(null)
+    startProgressMessages(docType)
+
     try {
       let result
       switch (docType) {
@@ -72,6 +118,7 @@ export function DocsPanel({ prdId, prdName }: DocsPanelProps) {
         setError(detail || 'Failed to generate documentation')
       }
     } finally {
+      stopProgressMessages()
       setIsGenerating(false)
     }
   }
@@ -132,13 +179,25 @@ export function DocsPanel({ prdId, prdName }: DocsPanelProps) {
           {isGenerating ? (
             <>
               <span className="spinner"></span>
-              Generating {DOC_TYPE_LABELS[docType].label}...
+              Generating...
             </>
           ) : (
             `Generate ${DOC_TYPE_LABELS[docType].label}`
           )}
         </button>
       </div>
+
+      {isGenerating && generationStatus && (
+        <div className="generation-progress">
+          <div className="progress-indicator">
+            <span className="progress-dot"></span>
+            <span className="progress-dot"></span>
+            <span className="progress-dot"></span>
+          </div>
+          <p className="progress-status">{generationStatus}</p>
+          <p className="progress-hint">This may take a moment depending on PRD complexity.</p>
+        </div>
+      )}
 
       {error && (
         <div className="error-message">

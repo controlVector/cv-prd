@@ -15,6 +15,7 @@ from app.services.openrouter_service import OpenRouterService
 from app.services.graph_service import GraphService
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_service import VectorService
+from app.services.database_service import DatabaseService
 from app.models.prd_models import ChunkType, Priority
 
 logger = logging.getLogger(__name__)
@@ -35,15 +36,19 @@ class DocGenerationService:
     def __init__(
         self,
         openrouter: OpenRouterService,
-        graph_service: GraphService,
+        graph_service: Optional[GraphService] = None,
         embedding_service: Optional[EmbeddingService] = None,
         vector_service: Optional[VectorService] = None,
+        database_service: Optional[DatabaseService] = None,
     ):
         self.openrouter = openrouter
         self.graph = graph_service
         self.embedding = embedding_service
         self.vector = vector_service
-        logger.info("DocGenerationService initialized")
+        self.db = database_service
+        logger.info("DocGenerationService initialized (graph=%s, db=%s)",
+                    "enabled" if graph_service and getattr(graph_service, 'available', True) else "disabled",
+                    "enabled" if database_service else "disabled")
 
     async def generate_user_manual(
         self,
@@ -443,33 +448,59 @@ Your response MUST be valid JSON with the following structure:
                     DocType.TECHNICAL_SPEC: ChunkType.TECHNICAL_SPEC.value,
                 }.get(doc_type, ChunkType.DOCUMENTATION.value)
 
-                # Store in graph
-                self.graph.create_chunk_node(chunk_id, {
-                    "type": chunk_type,
-                    "text": text,
-                    "priority": "medium",
-                    "context": f"{doc_type.value} for {prd_id}",
-                })
-
-                self.graph.link_chunk_to_prd(chunk_id, prd_id)
-
-                # Create DOCUMENTS relationships
                 related_ids = section.get("related_requirement_ids", [])
-                for req_id in related_ids:
-                    # Find matching chunk
-                    matching = [c for c in chunks if c.get('id') == req_id]
-                    if matching:
-                        self.graph.create_documents_relationship(
-                            doc_chunk_id=chunk_id,
-                            requirement_chunk_id=req_id,
-                            properties={"doc_type": doc_type.value}
+
+                # Store in database (primary storage for persistence)
+                if self.db:
+                    try:
+                        self.db.create_chunk(
+                            chunk_id=chunk_id,
+                            prd_id=prd_id,
+                            chunk_type=chunk_type,
+                            text=text,
+                            context_prefix=f"{doc_type.value} documentation",
+                            priority="medium",
+                            tags=[doc_type.value, "generated"],
+                            metadata={
+                                "doc_type": doc_type.value,
+                                "title": section.get("title", ""),
+                                "related_requirement_ids": related_ids,
+                            },
                         )
+                        logger.debug(f"Stored doc chunk {chunk_id} in database")
+                    except Exception as e:
+                        logger.warning(f"Failed to store doc chunk in database: {e}")
+
+                # Store in graph if available
+                graph_available = self.graph and getattr(self.graph, 'available', True)
+                if graph_available:
+                    try:
+                        self.graph.create_chunk_node(chunk_id, {
+                            "type": chunk_type,
+                            "text": text,
+                            "priority": "medium",
+                            "context": f"{doc_type.value} for {prd_id}",
+                        })
+
+                        self.graph.link_chunk_to_prd(chunk_id, prd_id)
+
+                        # Create DOCUMENTS relationships
+                        for req_id in related_ids:
+                            matching = [c for c in chunks if c.get('id') == req_id]
+                            if matching:
+                                self.graph.create_documents_relationship(
+                                    doc_chunk_id=chunk_id,
+                                    requirement_chunk_id=req_id,
+                                    properties={"doc_type": doc_type.value}
+                                )
+                    except Exception as e:
+                        logger.warning(f"Failed to store doc chunk in graph: {e}")
 
                 # Optionally embed
                 if self.embedding and self.vector:
                     try:
-                        embedding = await self.embedding.embed_text(text)
-                        await self.vector.index_chunk(
+                        embedding = self.embedding.embed_text(text)
+                        self.vector.index_chunk(
                             chunk_id=chunk_id,
                             vector=embedding,
                             payload={
@@ -486,7 +517,7 @@ Your response MUST be valid JSON with the following structure:
                     "prd_id": prd_id,
                     "chunk_type": chunk_type,
                     "title": section.get("title", ""),
-                    "text": text,
+                    "content": text,
                     "related_requirement_ids": related_ids,
                 }
                 doc_chunks.append(doc_chunk)

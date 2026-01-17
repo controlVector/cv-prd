@@ -60,6 +60,7 @@ doc_generation_service = DocGenerationService(
     graph_service=orchestrator.graph_service,
     embedding_service=orchestrator.embedding_service,
     vector_service=orchestrator.vector_service,
+    database_service=orchestrator.db_service,
 )
 
 
@@ -2254,13 +2255,58 @@ async def get_documentation_for_chunk(chunk_id: str):
 async def get_documentation_coverage(prd_id: str):
     """
     Get documentation coverage metrics for a PRD.
+    Works with or without graph service - falls back to database counts.
     """
     try:
-        if not orchestrator.graph_service:
-            raise HTTPException(status_code=503, detail="Graph service not available")
+        # Try graph service first if available
+        graph_available = orchestrator.graph_service and getattr(orchestrator.graph_service, 'available', True)
+        if graph_available:
+            try:
+                coverage = orchestrator.graph_service.get_documentation_coverage(prd_id)
+                return coverage
+            except Exception as e:
+                logger.warning(f"Graph doc coverage failed, falling back to DB: {e}")
 
-        coverage = orchestrator.graph_service.get_documentation_coverage(prd_id)
-        return coverage
+        # Fallback: Calculate coverage from database
+        if orchestrator.db_service:
+            chunks = orchestrator.db_service.get_chunks_for_prd(prd_id)
+
+            # Count requirements
+            testable_types = ['requirement', 'feature', 'constraint']
+            requirements = [c for c in chunks if c.chunk_type in testable_types]
+
+            # Count documentation chunks
+            doc_types = ['user_manual', 'api_doc', 'technical_spec', 'documentation', 'release_note']
+            docs = [c for c in chunks if c.chunk_type in doc_types]
+
+            total_requirements = len(requirements)
+            total_docs = len(docs)
+
+            # Estimate documented requirements from metadata
+            documented_ids = set()
+            for d in docs:
+                metadata = d.chunk_metadata or {}
+                related = metadata.get('related_requirement_ids', [])
+                if isinstance(related, list):
+                    documented_ids.update(related)
+
+            requirements_with_docs = len(documented_ids) if documented_ids else min(total_docs, total_requirements)
+            coverage_percent = round((requirements_with_docs / total_requirements * 100) if total_requirements > 0 else 0)
+
+            return {
+                "total_requirements": total_requirements,
+                "requirements_with_docs": requirements_with_docs,
+                "total_docs": total_docs,
+                "coverage_percent": coverage_percent,
+            }
+
+        # No data source available
+        return {
+            "total_requirements": 0,
+            "requirements_with_docs": 0,
+            "total_docs": 0,
+            "coverage_percent": 0,
+        }
 
     except Exception as e:
         logger.error(f"Error getting documentation coverage: {e}")
