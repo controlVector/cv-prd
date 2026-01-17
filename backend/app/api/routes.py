@@ -1299,36 +1299,40 @@ async def set_openrouter_key(request: OpenRouterKeyRequest):
 @router.post("/settings/test-openrouter-key")
 async def test_openrouter_key(request: OpenRouterKeyRequest):
     """
-    Test an OpenRouter API key without saving it
+    Test an OpenRouter API key without saving it.
+    Uses the /auth/key endpoint to validate the key without requiring
+    access to specific models like embeddings.
     """
     import httpx
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # Make a minimal embeddings request to test the key
-            response = await client.post(
-                "https://openrouter.ai/api/v1/embeddings",
+            # Use the auth/key endpoint to validate the key
+            # This returns key metadata if valid, 401 if invalid
+            response = await client.get(
+                "https://openrouter.ai/api/v1/auth/key",
                 headers={
                     "Authorization": f"Bearer {request.api_key}",
-                    "Content-Type": "application/json",
                     "HTTP-Referer": "https://cv-prd.local",
                     "X-Title": "cvPRD"
-                },
-                json={
-                    "model": "openai/text-embedding-3-small",
-                    "input": "test"
                 }
             )
 
             if response.status_code == 200:
+                data = response.json()
+                # Check if the key has credits
+                usage = data.get("data", {}).get("usage", 0)
+                limit = data.get("data", {}).get("limit")
+
+                if limit is not None and usage >= limit:
+                    return {"status": "error", "message": "API key has exceeded its usage limit"}
+
                 return {
                     "status": "success",
                     "message": "API key is valid"
                 }
             elif response.status_code == 401 or response.status_code == 403:
                 return {"status": "error", "message": "Invalid or unauthorized API key"}
-            elif response.status_code == 402:
-                return {"status": "error", "message": "Insufficient credits on this API key"}
             else:
                 data = response.json()
                 error_msg = data.get("error", {}).get("message", f"Error: {response.status_code}")

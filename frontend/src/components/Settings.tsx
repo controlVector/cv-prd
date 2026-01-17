@@ -37,7 +37,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   const [anthropicKey, setAnthropicKey] = useState('')
   const [githubToken, setGithubToken] = useState('')
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null)
+  const [testResult, setTestResult] = useState<'success' | 'error' | 'connection_error' | null>(null)
+  const [testErrorMessage, setTestErrorMessage] = useState<string>('')
 
   // AI Settings state
   const [models, setModels] = useState<AIModel[]>([])
@@ -201,6 +202,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
+    setTestErrorMessage('')
     try {
       const response = await fetch('http://127.0.0.1:8000/api/v1/settings/test-openrouter-key', {
         method: 'POST',
@@ -208,9 +210,16 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         body: JSON.stringify({ api_key: apiKey })
       })
       const data = await response.json()
-      setTestResult(data.status === 'success' ? 'success' : 'error')
-    } catch {
-      setTestResult('error')
+      if (data.status === 'success') {
+        setTestResult('success')
+      } else {
+        setTestResult('error')
+        setTestErrorMessage(data.message || 'Invalid API key')
+      }
+    } catch (e) {
+      // Connection error - backend not running or unreachable
+      setTestResult('connection_error')
+      setTestErrorMessage('Cannot connect to backend server. Please ensure the application started correctly.')
     }
     setTesting(false)
   }
@@ -357,7 +366,10 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                     <span className="test-result success">API key is valid</span>
                   )}
                   {testResult === 'error' && (
-                    <span className="test-result error">Invalid API key</span>
+                    <span className="test-result error">{testErrorMessage || 'Invalid API key'}</span>
+                  )}
+                  {testResult === 'connection_error' && (
+                    <span className="test-result error">{testErrorMessage}</span>
                   )}
                 </div>
               </div>
