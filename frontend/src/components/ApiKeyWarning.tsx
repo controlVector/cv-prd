@@ -28,7 +28,22 @@ export function ApiKeyWarning({ onOpenSettings }: ApiKeyWarningProps) {
       return
     }
 
-    // Check backend for shared credentials
+    // Check backend health endpoint first - this is the authoritative source
+    // for whether the API key is configured (via env var or saved credentials)
+    try {
+      const healthResponse = await fetch('http://127.0.0.1:8000/api/v1/health')
+      if (healthResponse.ok) {
+        const health = await healthResponse.json()
+        if (health.openrouter_configured) {
+          setChecking(false)
+          return
+        }
+      }
+    } catch {
+      // Backend not available - will show warning
+    }
+
+    // Also check credentials endpoint as fallback
     try {
       const response = await fetch('http://127.0.0.1:8000/api/v1/credentials/raw')
       if (response.ok) {
@@ -39,19 +54,7 @@ export function ApiKeyWarning({ onOpenSettings }: ApiKeyWarningProps) {
         }
       }
     } catch {
-      // Backend not available, check health endpoint for API key status
-      try {
-        const healthResponse = await fetch('http://127.0.0.1:8000/api/v1/health')
-        if (healthResponse.ok) {
-          const health = await healthResponse.json()
-          if (health.openrouter_configured) {
-            setChecking(false)
-            return
-          }
-        }
-      } catch {
-        // Backend not available at all
-      }
+      // Credentials endpoint not available
     }
 
     // No API key found - show warning
