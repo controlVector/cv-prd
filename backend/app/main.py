@@ -30,11 +30,16 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",      # React dev server (CRA)
+        "http://localhost:3001",      # React dev server (fallback port)
         "http://localhost:5173",      # Vite dev server
+        "http://localhost:5174",      # Vite dev server (fallback port)
         "http://localhost:3456",      # Electron frontend server
-        "http://127.0.0.1:3456",      # Electron frontend (IP variant)
+        "http://127.0.0.1:3000",      # IP variants
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3456",
+        "http://127.0.0.1:5173",
         "http://localhost:8000",      # Local API access
-        "http://127.0.0.1:8000",      # Local API access (IP variant)
+        "http://127.0.0.1:8000",
         "tauri://localhost",          # Tauri desktop app
         "https://tauri.localhost",    # Tauri desktop app (secure)
     ],

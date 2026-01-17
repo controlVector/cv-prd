@@ -81,6 +81,20 @@ jobs:
         run: |
           pip install nuitka ordered-set zstandard
 
+      - name: Download Redis and FalkorDB (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          mkdir -p src-tauri/binaries
+          # Download Redis
+          curl -L https://github.com/redis/redis/archive/refs/tags/7.4.2.tar.gz -o redis.tar.gz
+          tar xzf redis.tar.gz
+          cd redis-7.4.2 && make -j$(nproc) && cd ..
+          cp redis-7.4.2/src/redis-server src-tauri/binaries/redis-server-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/redis-server-x86_64-unknown-linux-gnu
+          # Download FalkorDB module
+          curl -L https://github.com/FalkorDB/FalkorDB/releases/download/v4.16.0/falkordb-x64.so -o src-tauri/binaries/falkordb-x86_64-unknown-linux-gnu.so
+          chmod +x src-tauri/binaries/falkordb-x86_64-unknown-linux-gnu.so
+
       - name: Build Python backend (Linux)
         if: matrix.platform == 'ubuntu-latest'
         working-directory: backend
@@ -130,6 +144,30 @@ jobs:
             --lto=no \
             --jobs=1 \
             run_server.py
+
+      - name: Download Redis and FalkorDB (macOS x86_64)
+        if: matrix.platform == 'macos-latest' && matrix.rust_target == 'x86_64-apple-darwin'
+        run: |
+          mkdir -p src-tauri/binaries
+          # Install Redis via brew and copy binary
+          brew install redis
+          cp $(brew --prefix redis)/bin/redis-server src-tauri/binaries/redis-server-x86_64-apple-darwin
+          chmod +x src-tauri/binaries/redis-server-x86_64-apple-darwin
+          # Download FalkorDB module for macOS
+          curl -L https://github.com/FalkorDB/FalkorDB/releases/download/v4.16.0/falkordb-macos-x64.so -o src-tauri/binaries/falkordb-x86_64-apple-darwin.so
+          chmod +x src-tauri/binaries/falkordb-x86_64-apple-darwin.so
+
+      - name: Download Redis and FalkorDB (macOS ARM)
+        if: matrix.platform == 'macos-latest' && matrix.rust_target == 'aarch64-apple-darwin'
+        run: |
+          mkdir -p src-tauri/binaries
+          # Install Redis via brew and copy binary
+          brew install redis
+          cp $(brew --prefix redis)/bin/redis-server src-tauri/binaries/redis-server-aarch64-apple-darwin
+          chmod +x src-tauri/binaries/redis-server-aarch64-apple-darwin
+          # Download FalkorDB module for macOS ARM
+          curl -L https://github.com/FalkorDB/FalkorDB/releases/download/v4.16.0/falkordb-macos-arm64v8.so -o src-tauri/binaries/falkordb-aarch64-apple-darwin.so
+          chmod +x src-tauri/binaries/falkordb-aarch64-apple-darwin.so
 
       - name: Build Python backend (macOS x86_64)
         if: matrix.platform == 'macos-latest' && matrix.rust_target == 'x86_64-apple-darwin'

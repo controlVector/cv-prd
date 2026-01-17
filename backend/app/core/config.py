@@ -3,38 +3,63 @@ from typing import Optional
 import os
 
 
+def _get_data_dir() -> str:
+    """Get the application data directory for the current platform."""
+    if os.name == 'nt':  # Windows
+        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        return os.path.join(base, 'cvprd', 'data')
+    elif hasattr(os, 'uname') and os.uname().sysname == 'Darwin':  # macOS
+        return os.path.expanduser('~/Library/Application Support/cvprd/data')
+    else:  # Linux
+        return os.path.expanduser('~/.local/share/cvprd/data')
+
+
+def _get_default_database_url() -> str:
+    """Get default database URL based on mode."""
+    if os.getenv("DATABASE_URL"):
+        return os.getenv("DATABASE_URL")
+    if os.getenv("DESKTOP_MODE", "").lower() == "true":
+        data_dir = _get_data_dir()
+        os.makedirs(data_dir, exist_ok=True)
+        return f"sqlite:///{os.path.join(data_dir, 'cvprd.db')}"
+    return "postgresql://cvprd:cvprd_dev@localhost:5433/cvprd"
+
+
 class Settings(BaseSettings):
     # Application
     APP_NAME: str = "cvPRD"
     DEBUG: bool = True
 
+    # Desktop Mode - when true, uses embedded/local services instead of remote servers
+    DESKTOP_MODE: bool = os.getenv("DESKTOP_MODE", "false").lower() == "true"
+
     # Server
-    HOST: str = os.getenv("HOST", "0.0.0.0")
+    HOST: str = os.getenv("HOST", "127.0.0.1" if os.getenv("DESKTOP_MODE", "").lower() == "true" else "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
 
-    # Database (supports both PostgreSQL and SQLite)
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://cvprd:cvprd_dev@localhost:5433/cvprd")
+    # Database (PostgreSQL for server mode, SQLite for desktop mode)
+    DATABASE_URL: str = _get_default_database_url()
 
-    # FalkorDB (Redis-based graph database - replaces Neo4j)
-    # Compatible with cv-git's graph infrastructure
-    FALKORDB_ENABLED: bool = os.getenv("FALKORDB_ENABLED", "true").lower() == "true"
+    # FalkorDB (Redis-based graph database)
+    # In desktop mode on Windows, falls back to in-memory graph since FalkorDB doesn't support Windows
+    FALKORDB_ENABLED: bool = os.getenv("FALKORDB_ENABLED", "false" if os.getenv("DESKTOP_MODE", "").lower() == "true" and os.name == 'nt' else "true").lower() == "true"
     FALKORDB_URL: str = os.getenv("FALKORDB_URL", "redis://localhost:6379")
     FALKORDB_DATABASE: str = os.getenv("FALKORDB_DATABASE", "cvprd")
 
     # Legacy Neo4j settings (deprecated, kept for backwards compatibility)
-    # These are no longer used - FalkorDB is now the default graph database
     NEO4J_ENABLED: bool = False  # Deprecated - use FALKORDB_ENABLED
     NEO4J_URI: str = "bolt://localhost:7687"  # Deprecated
     NEO4J_USER: str = "neo4j"  # Deprecated
     NEO4J_PASSWORD: str = "cvprd_dev"  # Deprecated
 
-    # Qdrant
+    # Qdrant - in desktop mode, uses local file storage instead of remote server
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
     QDRANT_COLLECTION: str = "prd_chunks"
+    QDRANT_LOCAL_PATH: Optional[str] = os.getenv("QDRANT_LOCAL_PATH", os.path.join(_get_data_dir(), "qdrant") if os.getenv("DESKTOP_MODE", "").lower() == "true" else None)
 
-    # Redis for caching/queues (separate from FalkorDB)
-    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "true").lower() == "true"
+    # Redis for caching/queues (disabled in desktop mode)
+    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "false" if os.getenv("DESKTOP_MODE", "").lower() == "true" else "true").lower() == "true"
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6380")
 
     # Embeddings - using OpenRouter's text-embedding-3-small (1536 dimensions)

@@ -10,6 +10,7 @@ from qdrant_client.models import (
 )
 from typing import List, Dict, Any, Optional
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,52 @@ class VectorService:
         port: int = 6333,
         collection_name: str = "prd_chunks",
         vector_size: int = 384,
+        local_path: Optional[str] = None,
     ):
-        logger.info(f"Connecting to Qdrant at {host}:{port}")
-        self.client = QdrantClient(host=host, port=port)
         self.collection_name = collection_name
         self.vector_size = vector_size
+
+        # Determine if we should use local mode (embedded Qdrant)
+        # Priority: local_path param > QDRANT_LOCAL_PATH env > DESKTOP_MODE env > remote server
+        if local_path:
+            self._init_local(local_path)
+        elif os.getenv("QDRANT_LOCAL_PATH"):
+            self._init_local(os.getenv("QDRANT_LOCAL_PATH"))
+        elif os.getenv("DESKTOP_MODE", "").lower() == "true":
+            # Desktop mode: use local storage in user's data directory
+            data_dir = self._get_data_dir()
+            self._init_local(os.path.join(data_dir, "qdrant"))
+        else:
+            # Server mode: connect to remote Qdrant
+            self._init_remote(host, port)
+
         self._ensure_collection()
+
+    def _get_data_dir(self) -> str:
+        """Get the application data directory for the current platform."""
+        if os.name == 'nt':  # Windows
+            base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+            data_dir = os.path.join(base, 'cvprd', 'data')
+        elif os.uname().sysname == 'Darwin':  # macOS
+            data_dir = os.path.expanduser('~/Library/Application Support/cvprd/data')
+        else:  # Linux
+            data_dir = os.path.expanduser('~/.local/share/cvprd/data')
+
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+
+    def _init_local(self, path: str) -> None:
+        """Initialize Qdrant in local/embedded mode with file storage."""
+        os.makedirs(path, exist_ok=True)
+        logger.info(f"Initializing Qdrant in local mode at: {path}")
+        self.client = QdrantClient(path=path)
+        self.is_local = True
+
+    def _init_remote(self, host: str, port: int) -> None:
+        """Initialize Qdrant connection to remote server."""
+        logger.info(f"Connecting to Qdrant server at {host}:{port}")
+        self.client = QdrantClient(host=host, port=port)
+        self.is_local = False
 
     def _ensure_collection(self):
         """Create collection if it doesn't exist"""

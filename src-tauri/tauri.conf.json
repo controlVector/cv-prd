@@ -45,7 +45,11 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/cvprd-backend"
+      "binaries/cvprd-backend",
+      "binaries/redis-server"
+    ],
+    "resources": [
+      "binaries/falkordb-*.so"
     ],
     "category": "DeveloperTool",
     "shortDescription": "AI-powered product requirements document manager",

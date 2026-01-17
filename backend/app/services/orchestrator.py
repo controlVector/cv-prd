@@ -20,23 +20,30 @@ class PRDOrchestrator:
 
     def __init__(self):
         self.embedding_service = EmbeddingService(model_name=settings.EMBEDDING_MODEL)
+
+        # Initialize Qdrant - uses local mode if QDRANT_LOCAL_PATH is set or in DESKTOP_MODE
         self.vector_service = VectorService(
             host=settings.QDRANT_HOST,
             port=settings.QDRANT_PORT,
             collection_name=settings.QDRANT_COLLECTION,
             vector_size=settings.EMBEDDING_DIMENSION,
+            local_path=settings.QDRANT_LOCAL_PATH,
         )
 
-        # Database service for PostgreSQL persistence
+        if settings.DESKTOP_MODE:
+            logger.info("Running in DESKTOP MODE - using embedded services")
+
+        # Database service (PostgreSQL or SQLite based on DATABASE_URL)
         self.db_service: Optional[DatabaseService] = None
         try:
             self.db_service = DatabaseService()
-            logger.info("PostgreSQL database service initialized")
+            db_type = "SQLite" if "sqlite" in settings.DATABASE_URL else "PostgreSQL"
+            logger.info(f"{db_type} database service initialized")
         except Exception as e:
             logger.warning(f"Could not initialize database service: {e}")
-            logger.info("Running without PostgreSQL persistence")
+            logger.info("Running without database persistence")
 
-        # Graph service is optional (can be disabled)
+        # Graph service is optional (disabled in desktop mode on Windows, or if FALKORDB_ENABLED=false)
         self.graph_service: Optional[GraphService] = None
         if settings.FALKORDB_ENABLED:
             try:
@@ -48,6 +55,8 @@ class PRDOrchestrator:
             except Exception as e:
                 logger.warning(f"Could not initialize graph service: {e}")
                 logger.info("Running without graph features")
+        else:
+            logger.info("FalkorDB disabled - running without graph features")
 
     def process_prd(self, prd: PRD, source_file: Optional[str] = None) -> Dict[str, Any]:
         """
