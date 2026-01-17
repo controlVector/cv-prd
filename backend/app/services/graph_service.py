@@ -27,8 +27,10 @@ class GraphService:
         self.url = url
         self.graph_name = database
         self.client: Optional[redis.Redis] = None
+        self.available = False  # Track if FalkorDB is actually available
         self._connect()
-        self._ensure_indexes()
+        if self.available:
+            self._ensure_indexes()
 
     def _connect(self) -> None:
         """Establish connection to FalkorDB via Redis."""
@@ -36,7 +38,17 @@ class GraphService:
             self.client = redis.from_url(self.url, decode_responses=True)
             # Test connection
             self.client.ping()
-            logger.info(f"Connected to FalkorDB, graph: {self.graph_name}")
+            # Verify FalkorDB module is loaded by trying a simple command
+            try:
+                self.client.execute_command("GRAPH.LIST")
+                self.available = True
+                logger.info(f"Connected to FalkorDB, graph: {self.graph_name}")
+            except Exception as e:
+                if "unknown command" in str(e).lower():
+                    logger.warning("Redis connected but FalkorDB module not loaded - graph features disabled")
+                    self.available = False
+                else:
+                    raise
         except Exception as e:
             logger.error(f"Failed to connect to FalkorDB: {e}")
             raise
@@ -82,10 +94,15 @@ class GraphService:
             params: Query parameters
 
         Returns:
-            List of result dictionaries
+            List of result dictionaries (empty list if FalkorDB unavailable)
         """
         if not self.client:
-            raise RuntimeError("Not connected to FalkorDB")
+            logger.warning("FalkorDB client not connected")
+            return []
+
+        if not self.available:
+            # FalkorDB module not loaded - silently return empty results
+            return []
 
         # Replace parameters in query (FalkorDB style)
         processed_query = cypher

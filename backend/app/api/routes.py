@@ -1240,7 +1240,7 @@ async def health_check():
         "openrouter_configured": bool(settings.OPENROUTER_API_KEY),
         "services": {
             "vector_db": "connected",
-            "graph_db": "connected" if orchestrator.graph_service else "disabled",
+            "graph_db": "connected" if (orchestrator.graph_service and orchestrator.graph_service.available) else "disabled",
             "database": "connected" if orchestrator.db_service else "disabled",
             "embeddings": "loaded",
         },

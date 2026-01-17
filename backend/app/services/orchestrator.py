@@ -99,8 +99,8 @@ class PRDOrchestrator:
         chunks = ChunkingService.chunk_prd(prd)
         logger.info(f"Created {len(chunks)} chunks")
 
-        # 3. Create PRD node in graph (if enabled)
-        if self.graph_service:
+        # 3. Create PRD node in graph (if enabled and available)
+        if self.graph_service and self.graph_service.available:
             self.graph_service.create_prd_node(
                 prd_id=prd.id, prd_data={"name": prd.name, "description": prd.description}
             )
@@ -144,7 +144,7 @@ class PRDOrchestrator:
                     logger.warning(f"Failed to save chunk to PostgreSQL: {e}")
 
             # Create node in FalkorDB (if enabled)
-            if self.graph_service:
+            if self.graph_service and self.graph_service.available:
                 self.graph_service.create_chunk_node(
                     chunk_id=chunk.id,
                     chunk_data={
@@ -160,7 +160,7 @@ class PRDOrchestrator:
 
         # 4. Detect and create relationships (if graph enabled)
         relationships = []
-        if self.graph_service:
+        if self.graph_service and self.graph_service.available:
             relationships = ChunkingService.detect_relationships(chunks)
             logger.info(f"Found {len(relationships)} relationships")
 
@@ -280,7 +280,7 @@ class PRDOrchestrator:
             List of PRD summaries
         """
         # Try graph first (has chunk counts)
-        if self.graph_service:
+        if self.graph_service and self.graph_service.available:
             try:
                 return self.graph_service.get_all_prds()
             except Exception as e:
@@ -307,7 +307,7 @@ class PRDOrchestrator:
             PRD details including chunks and statistics
         """
         # Try graph first
-        if self.graph_service:
+        if self.graph_service and self.graph_service.available:
             try:
                 result = self.graph_service.get_prd_details(prd_id)
                 if result:
@@ -346,7 +346,7 @@ class PRDOrchestrator:
                 success = False
 
         # Delete from graph
-        if self.graph_service:
+        if self.graph_service and self.graph_service.available:
             try:
                 self.graph_service.delete_prd(prd_id)
                 logger.info(f"Deleted PRD from FalkorDB: {prd_id}")
@@ -361,7 +361,7 @@ class PRDOrchestrator:
 
     def close(self):
         """Close all service connections"""
-        if self.graph_service:
+        if self.graph_service and self.graph_service.available:
             self.graph_service.close()
         if self.db_service:
             self.db_service.close()
