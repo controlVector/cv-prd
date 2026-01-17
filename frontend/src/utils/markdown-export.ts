@@ -52,7 +52,7 @@ function getChunkTypeIcon(type: string): string {
     objective: '🎯',
     overview: '📄',
   }
-  return icons[type.toLowerCase()] || '•'
+  return icons[(type || 'unknown').toLowerCase()] || '•'
 }
 
 /**
@@ -65,7 +65,7 @@ function getPriorityBadge(priority: string): string {
     medium: '🟡 Medium',
     low: '🟢 Low',
   }
-  return badges[priority.toLowerCase()] || priority
+  return badges[(priority || 'medium').toLowerCase()] || priority || 'Medium'
 }
 
 /**

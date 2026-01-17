@@ -224,11 +224,11 @@ export function PRDDetail({ prdId, onBack }: PRDDetailProps) {
                   {chunks.map((chunk: any, idx: number) => (
                     <div key={chunk.id || idx} className="prd-chunk">
                       <div className="chunk-header">
-                        <span className={`chunk-type chunk-type-${chunk.type.toLowerCase()}`}>
-                          {chunk.type}
+                        <span className={`chunk-type chunk-type-${(chunk.type || 'unknown').toLowerCase()}`}>
+                          {chunk.type || 'Unknown'}
                         </span>
-                        <span className={`chunk-priority chunk-priority-${chunk.priority.toLowerCase()}`}>
-                          {chunk.priority}
+                        <span className={`chunk-priority chunk-priority-${(chunk.priority || 'medium').toLowerCase()}`}>
+                          {chunk.priority || 'Medium'}
                         </span>
                         {chunk.optimized && (
                           <span className="chunk-badge optimized">Optimized</span>
